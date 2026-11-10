@@ -1,6 +1,6 @@
 import { assemblePassport, READY_COVERAGE } from '../passport/assemble';
 import { DEFAULT_PERIOD, type Period } from '../passport/periods';
-import type { Passport, Snapshot } from '../passport/types';
+import { SNAPSHOT_VERSION, type Passport, type Snapshot } from '../passport/types';
 import { isRealCountry } from '../geo/countries';
 import { artistKey, normaliseName } from './artist-key';
 import type { createLastfmClient } from './lastfm/client';
@@ -49,12 +49,11 @@ const storeKey = (username: string, period: Period) => `${username.toLowerCase()
 
 function candidates(s: Snapshot): QueueItem[] {
 	const own = new Set(s.artists.map(artistKey));
-	const heard = new Set(s.heard ?? []);
 	const best = new Map<string, { item: QueueItem; match: number }>();
 	for (const { artists } of s.similar) {
 		for (const c of artists) {
 			const key = artistKey(c);
-			if (own.has(key) || heard.has(normaliseName(c.name))) continue;
+			if (own.has(key)) continue;
 			if ((best.get(key)?.match ?? -1) >= c.match) continue;
 			best.set(key, { item: { name: c.name, mbid: c.mbid }, match: c.match });
 		}
@@ -79,8 +78,8 @@ export async function getSnapshot(
 ): Promise<Snapshot> {
 	const period = opts.period ?? DEFAULT_PERIOD;
 	const existing = await deps.snapshots.get(storeKey(username, period));
-	// Snapshots from before `heard` existed are treated as stale.
-	const fresh = existing?.heard && deps.now() - existing.createdAt < SNAPSHOT_TTL_MS;
+	const fresh =
+		existing?.version === SNAPSHOT_VERSION && deps.now() - existing.createdAt < SNAPSHOT_TTL_MS;
 	if (existing && fresh && !opts.refresh) return existing;
 
 	const user = await deps.lastfm.getUser(username);
@@ -88,17 +87,22 @@ export async function getSnapshot(
 		deps.lastfm.getTopArtists(user.name, TOP_ARTISTS, period),
 		deps.lastfm.getTopTracks(user.name, TOP_TRACKS, period)
 	]);
+	// Everyone the user has ever listened to, so next destination never suggests them. Used here
+	// to filter the similar lists and not stored, which keeps snapshots small.
+	const heard = new Set(
+		(await deps.lastfm.getHeardArtistNames(user.name, HEARD_PAGES).catch(() => artists.map((a) => a.name))).map(
+			normaliseName
+		)
+	);
 	const similar = await Promise.all(
 		artists.slice(0, SIMILAR_SEEDS).map(async (seed) => ({
 			seed: seed.name,
 			// A missing similar list only weakens next destination; don't fail the passport.
-			artists: await deps.lastfm.getSimilar(seed, SIMILAR_PER_SEED).catch(() => [])
+			artists: (await deps.lastfm.getSimilar(seed, SIMILAR_PER_SEED).catch(() => [])).filter(
+				(c) => !heard.has(normaliseName(c.name))
+			)
 		}))
 	);
-	// Everyone the user has ever listened to, so next destination never suggests them.
-	const heard = await deps.lastfm
-		.getHeardArtistNames(user.name, HEARD_PAGES)
-		.catch(() => artists.map((a) => a.name));
 
 	const snapshot: Snapshot = {
 		username: user.name,
@@ -108,7 +112,7 @@ export async function getSnapshot(
 		artists,
 		tracks,
 		similar,
-		heard: [...new Set(heard.map(normaliseName))]
+		version: SNAPSHOT_VERSION
 	};
 
 	// Pick up countries already resolved for other users.
@@ -170,7 +174,7 @@ export function pendingQueue(s: Snapshot, records: Map<string, ArtistRecord>): Q
  */
 export function nameCheckQueue(s: Snapshot, records: Map<string, ArtistRecord>): QueueItem[] {
 	const ownKeys = new Set(s.artists.map(artistKey));
-	const skipNames = new Set([...s.artists.map((a) => normaliseName(a.name)), ...s.heard]);
+	const skipNames = new Set(s.artists.map((a) => normaliseName(a.name)));
 	const visited = new Set(
 		s.artists.map((a) => records.get(artistKey(a))?.country).filter((c) => isRealCountry(c))
 	);

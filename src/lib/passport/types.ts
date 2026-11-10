@@ -7,6 +7,8 @@ import type {
 import type { Period } from './periods';
 
 /** Everything Soundstamp fetched from last.fm for one user. */
+export const SNAPSHOT_VERSION = 2;
+
 export interface Snapshot {
 	username: string;
 	period: Period;
@@ -15,9 +17,10 @@ export interface Snapshot {
 	artists: LastfmArtist[];
 	tracks: LastfmTrack[];
 	/** Similar artists for each of the user's top artists; `seed` is the seed artist's name. */
+	/** Similar artists per seed, already filtered to ones the user has never listened to. */
 	similar: { seed: string; artists: SimilarArtist[] }[];
-	/** Normalised names of every artist the user has listened to (all time, capped). */
-	heard: string[];
+	/** Storage format; snapshots in an older format are refetched. */
+	version: 2;
 }
 
 export interface Stamp {

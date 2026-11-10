@@ -297,12 +297,18 @@ describe('periods', () => {
 });
 
 describe('next destination checks', () => {
-	test('stores the full listening history as normalised names', async () => {
-		const lastfm = fakeLastfm({ name: 'RJ', artists: [artist('A', 1)], heard: ['A', ' Hyde  '] });
+	test('drops artists from the listening history out of the similar lists, without storing the history', async () => {
+		const lastfm = fakeLastfm({
+			name: 'RJ',
+			artists: [artist('Seed', 1)],
+			similar: { Seed: [sim('Hyde', 0.9), sim('New One', 0.5)] },
+			heard: ['Seed', ' hyde  ']
+		});
 		const clock = { t: 0 };
 		const deps = fakeDeps(lastfm.client, fakeMusicBrainz({}, clock).client, clock);
 		const s = await getSnapshot(deps, 'rj');
-		expect(s.heard).toEqual(['a', 'hyde']);
+		expect(s.similar[0].artists.map((a) => a.name)).toEqual(['New One']);
+		expect(s).not.toHaveProperty('heard');
 		expect(lastfm.calls.find((c) => c.method === 'getHeardArtistNames')?.args).toEqual(['RJ', 5]);
 	});
 
@@ -330,23 +336,14 @@ describe('next destination checks', () => {
 	});
 });
 
-test('snapshots saved before listening history was stored are refetched', async () => {
-	const lastfm = fakeLastfm({ name: 'RJ', heard: ['A'] });
+test('snapshots saved in an older format are refetched', async () => {
+	const lastfm = fakeLastfm({ name: 'RJ' });
 	const clock = { t: 1000 };
 	const deps = fakeDeps(lastfm.client, fakeMusicBrainz({}, clock).client, clock);
-	const legacy = snapshot({ username: 'RJ', createdAt: 900 }) as Partial<ReturnType<typeof snapshot>>;
-	delete legacy.heard;
-	await deps.snapshots.set('rj:12month', legacy as ReturnType<typeof snapshot>);
-	expect((await getSnapshot(deps, 'rj')).heard).toEqual(['a']);
-});
-
-test('destination candidates the user has already heard are never looked up', () => {
-	const s = snapshot({
-		artists: [artist('A', 10)],
-		similar: [{ seed: 'A', artists: [sim('Heard Before', 0.99), sim('New One', 0.5)] }],
-		heard: ['heard before']
-	});
-	expect(pendingQueue(s, new Map([['name:a', known('IS')]])).map((q) => q.name)).toEqual(['New One']);
+	const legacy = { ...snapshot({ username: 'RJ', createdAt: 900 }), version: undefined };
+	await deps.snapshots.set('rj:12month', legacy as never);
+	await getSnapshot(deps, 'rj');
+	expect(lastfm.calls.filter((c) => c.method === 'getUser')).toHaveLength(1);
 });
 
 test('a 503 before any progress reports unavailable', async () => {

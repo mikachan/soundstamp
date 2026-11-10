@@ -88,8 +88,3 @@ test('skips candidates whose name is shared by several MusicBrainz artists, or n
 	expect(rankDestinations(s, records, visited).map((d) => d.country)).toEqual(['SE']);
 });
 
-test("skips artists anywhere in the user's listening history", () => {
-	const { s, records, visited } = setup();
-	s.heard = ['kerli', 'mart avi'];
-	expect(rankDestinations(s, records, visited).map((d) => d.country)).toEqual(['SE']);
-});

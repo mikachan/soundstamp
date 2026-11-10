@@ -10,7 +10,7 @@ export function rankDestinations(
 	visited: Set<string>
 ): Destination[] {
 	const ownKeys = new Set(s.artists.map(artistKey));
-	const ownNames = new Set([...s.artists.map((a) => normaliseName(a.name)), ...s.heard]);
+	const ownNames = new Set(s.artists.map((a) => normaliseName(a.name)));
 	const best = new Map<string, Destination>();
 
 	for (const { seed, artists } of s.similar) {
