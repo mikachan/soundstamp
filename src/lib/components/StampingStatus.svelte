@@ -23,6 +23,12 @@
 				{message}
 			</p>
 		{/if}
+		{#if message && !passport.ready}
+			<p class="note">
+				Your first visit can take a few minutes: MusicBrainz, where the country data comes from,
+				allows about one lookup a second. Your progress is saved, so you can leave and come back.
+			</p>
+		{/if}
 		{#if passport.unknownArtists > 0}
 			<p class="unknown">{plural(passport.unknownArtists, 'artist')} without a known home country</p>
 		{/if}
@@ -56,7 +62,11 @@
 			var(--rule) calc(var(--coverage) * 100%)
 		);
 	}
-	.unknown {
+	.unknown,
+	.note {
 		color: var(--muted);
+	}
+	.note {
+		max-width: 40rem;
 	}
 </style>

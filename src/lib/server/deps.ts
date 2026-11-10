@@ -15,10 +15,16 @@ export function createDeps(env: { LASTFM_API_KEY?: string; MB_CONTACT?: string }
 	const throttle = createThrottle({ kv: blobsKV<number>('meta'), now: Date.now, sleep });
 	return {
 		lastfm: createLastfmClient({ apiKey: env.LASTFM_API_KEY, fetch }),
-		mb: createMusicBrainzClient({ fetch, contact: env.MB_CONTACT, beforeRequest: throttle.wait }),
+		mb: createMusicBrainzClient({
+			fetch,
+			contact: env.MB_CONTACT,
+			beforeRequest: throttle.wait,
+			areas: blobsKV<{ country: string | null }>('areas')
+		}),
 		artists: blobsKV<ArtistRecord>('artists'),
 		snapshots: blobsKV<Snapshot>('snapshots'),
 		records: blobsKV<Record<string, ArtistRecord>>('records'),
+		bulkMisses: new Set(),
 		now: Date.now
 	};
 }

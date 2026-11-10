@@ -3,7 +3,7 @@ import type { Passport, Snapshot } from '../passport/types';
 import { artistKey } from './artist-key';
 import type { createLastfmClient } from './lastfm/client';
 import type { createMusicBrainzClient } from './musicbrainz/client';
-import { DeadlineReached, MusicBrainzUnavailable } from './musicbrainz/client';
+import { BULK_LIMIT, DeadlineReached, MusicBrainzUnavailable } from './musicbrainz/client';
 import { ThrottleBusy } from './store/throttle';
 import type { ArtistRecord, KV } from './store/types';
 
@@ -13,8 +13,9 @@ const TOP_TRACKS = 500;
 const SIMILAR_SEEDS = 10;
 const SIMILAR_PER_SEED = 20;
 const MAX_CANDIDATES = 50;
-// Every MusicBrainz request also checks this deadline, so a batch ends within ~8 s.
-const DEFAULT_BUDGET_MS = 5000;
+// Every MusicBrainz request also checks this deadline, so a batch ends within ~15 s:
+// well inside Netlify's 60 s synchronous limit, and short enough for frequent progress updates.
+const DEFAULT_BUDGET_MS = 12_000;
 const READ_CONCURRENCY = 50;
 
 export interface StampingDeps {
@@ -26,6 +27,8 @@ export interface StampingDeps {
 	snapshots: KV<Snapshot>;
 	/** Resolved records per user, merged on write so concurrent batches don't lose each other's work. */
 	records: KV<Record<string, ArtistRecord>>;
+	/** MBIDs a bulk search couldn't answer, so later batches look them up one by one instead. */
+	bulkMisses: Set<string>;
 	now: () => number;
 }
 
@@ -135,6 +138,14 @@ export function pendingQueue(s: Snapshot, records: Map<string, ArtistRecord>): Q
 	return [...first, ...middle, ...rest];
 }
 
+/** How a failed lookup affects the batch: stop with a status, or (null) mark the artist unknown and continue. */
+function stopStatus(error: unknown): BatchResult['status'] | 'stop' | null {
+	if (error instanceof DeadlineReached) return 'stop';
+	if (error instanceof ThrottleBusy) return 'queued';
+	if (error instanceof MusicBrainzUnavailable) return 'unavailable';
+	return null;
+}
+
 export async function stampNextBatch(
 	deps: StampingDeps,
 	username: string,
@@ -145,43 +156,73 @@ export async function stampNextBatch(
 	const deadline = deps.now() + budgetMs;
 	const fresh: Record<string, ArtistRecord> = {};
 	let status: BatchResult['status'] = 'ok';
+	let stopped = false;
 
-	for (const item of pendingQueue(s, records)) {
-		if (deps.now() >= deadline) break;
+	const keep = (key: string, record: ArtistRecord) => {
+		records.set(key, record);
+		fresh[key] = record;
+	};
+	const finish = async (): Promise<BatchResult> => {
+		await mergeRecords(deps, s.username, fresh);
+		return { status, passport: assemblePassport(s, records), remaining: pendingQueue(s, records).length };
+	};
+
+	const queue = pendingQueue(s, records);
+
+	// One search request answers up to 100 artists that have MBIDs.
+	const withIds = queue.filter((q) => q.mbid && !deps.bulkMisses.has(q.mbid)).slice(0, BULK_LIMIT);
+	const cached = await Promise.all(withIds.map((q) => deps.artists.get(artistKey(q))));
+	withIds.forEach((q, i) => {
+		if (cached[i]) keep(artistKey(q), cached[i]);
+	});
+	const uncached = withIds.filter((_, i) => !cached[i]);
+	if (uncached.length) {
+		try {
+			const answers = await deps.mb.resolveMany(uncached, { deadline });
+			for (const q of uncached) {
+				if (!answers.has(q.mbid!)) {
+					deps.bulkMisses.add(q.mbid!);
+					continue;
+				}
+				const record = { country: answers.get(q.mbid!)!, resolvedAt: deps.now() };
+				await deps.artists.set(artistKey(q), record);
+				keep(artistKey(q), record);
+			}
+		} catch (error) {
+			const stop = stopStatus(error);
+			if (stop === null) throw error;
+			if (stop !== 'stop') status = stop;
+			stopped = true;
+		}
+	}
+	if (stopped) return finish();
+
+	// Everything else, one at a time: artists without MBIDs, area walks, and stale MBIDs.
+	for (const item of queue) {
 		const key = artistKey(item);
+		if (records.has(key)) continue;
+		if (deps.now() >= deadline) break;
 		try {
 			let record = await deps.artists.get(key);
 			if (!record) {
 				record = { country: await deps.mb.resolveArtistCountry(item, { deadline }), resolvedAt: deps.now() };
 				await deps.artists.set(key, record);
 			}
-			records.set(key, record);
-			fresh[key] = record;
+			keep(key, record);
 		} catch (error) {
-			if (error instanceof DeadlineReached) break;
-			if (error instanceof ThrottleBusy) {
-				status = 'queued';
-				break;
-			}
-			if (error instanceof MusicBrainzUnavailable) {
-				status = 'unavailable';
+			const stop = stopStatus(error);
+			if (stop !== null) {
+				if (stop !== 'stop') status = stop;
 				break;
 			}
 			// Anything else would fail the same way every time: count the artist as unknown
 			// for this user (not in the shared cache) so the rest of the queue can move on.
 			console.error(`stamping ${item.name} failed`, error);
-			const unknown = { country: null, resolvedAt: deps.now() };
-			records.set(key, unknown);
-			fresh[key] = unknown;
+			keep(key, { country: null, resolvedAt: deps.now() });
 		}
 	}
 
-	await mergeRecords(deps, s.username, fresh);
-	return {
-		status,
-		passport: assemblePassport(s, records),
-		remaining: pendingQueue(s, records).length
-	};
+	return finish();
 }
 
 /** The passport as it stands, plus how many lookups are still queued (including destination candidates). */

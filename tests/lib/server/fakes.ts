@@ -41,13 +41,28 @@ export function fakeLastfm(opts: {
 type Answer = string | null | Error | (() => Promise<string | null>);
 
 /** MusicBrainz stub: name → country, Error to throw, or a hook. Each call advances the clock. */
-export function fakeMusicBrainz(answers: Record<string, Answer>, clock: { t: number }, stepMs = 1000) {
+export function fakeMusicBrainz(
+	answers: Record<string, Answer>,
+	clock: { t: number },
+	stepMs = 1000,
+	bulk: Record<string, string | null> | Error = {}
+) {
 	const asked: string[] = [];
 	const deadlines: (number | undefined)[] = [];
+	const bulkCalls: string[][] = [];
 	return {
 		asked,
 		deadlines,
+		bulkCalls,
 		client: {
+			async resolveMany(artists: { name: string; mbid?: string }[], _opts: { deadline?: number } = {}) {
+				bulkCalls.push(artists.map((a) => a.mbid!));
+				clock.t += stepMs;
+				if (bulk instanceof Error) throw bulk;
+				return new Map(
+					artists.filter((a) => a.mbid! in bulk).map((a) => [a.mbid!, bulk[a.mbid!]] as const)
+				);
+			},
 			async resolveArtistCountry(artist: { name: string; mbid?: string }, opts: { deadline?: number } = {}) {
 				asked.push(artist.name);
 				deadlines.push(opts.deadline);
@@ -72,6 +87,7 @@ export function fakeDeps(
 		artists: memoryKV<ArtistRecord>(),
 		snapshots: memoryKV<Snapshot>(),
 		records: memoryKV<Record<string, ArtistRecord>>(),
+		bulkMisses: new Set(),
 		now: () => clock.t
 	};
 }

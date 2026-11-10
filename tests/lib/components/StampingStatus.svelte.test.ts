@@ -41,3 +41,23 @@ describe('StampingStatus', () => {
 		expect(container).toHaveTextContent('7 artists without a known home country');
 	});
 });
+
+describe('first-visit note', () => {
+	test('explains why stamping takes a while and that progress is saved', () => {
+		const { container } = render(StampingStatus, {
+			passport: passport({ ready: false, coverage: 0.2, pendingArtists: 300 }),
+			status: 'ok'
+		});
+		expect(container).toHaveTextContent(
+			'Your first visit can take a few minutes: MusicBrainz, where the country data comes from, allows about one lookup a second. Your progress is saved, so you can leave and come back.'
+		);
+	});
+
+	test('is hidden once the passport is ready', () => {
+		const { container } = render(StampingStatus, {
+			passport: passport({ ready: true, coverage: 0.95, pendingArtists: 12 }),
+			status: 'ok'
+		});
+		expect(container).not.toHaveTextContent('first visit');
+	});
+});

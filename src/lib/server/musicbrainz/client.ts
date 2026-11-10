@@ -1,8 +1,11 @@
 import { isRealCountry } from '../../geo/countries';
 import { normaliseName } from '../artist-key';
+import type { KV } from '../store/types';
 
 const API_ROOT = 'https://musicbrainz.org/ws/2';
 const MAX_AREA_HOPS = 3;
+/** MusicBrainz search returns at most 100 results per request. */
+export const BULK_LIMIT = 100;
 /** Worst-case time one request can take: a full throttle wait plus the round trip. */
 const REQUEST_RESERVE_MS = 3000;
 
@@ -31,6 +34,8 @@ export function createMusicBrainzClient(opts: {
 	contact: string;
 	beforeRequest: () => Promise<void>;
 	now?: () => number;
+	/** Shared area id → country cache; many artists share a city. */
+	areas?: KV<{ country: string | null }>;
 }) {
 	const userAgent = `Soundstamp/0.1 ( ${opts.contact} )`;
 	const now = opts.now ?? Date.now;
@@ -64,6 +69,16 @@ export function createMusicBrainzClient(opts: {
 	}
 
 	async function countryFromArea(start: Area, deadline: number): Promise<string | null> {
+		const direct = countryFromCodes(start['iso-3166-1-codes']);
+		if (direct !== undefined) return direct;
+		const cached = await opts.areas?.get(start.id);
+		if (cached) return cached.country;
+		const country = await walkArea(start, deadline);
+		await opts.areas?.set(start.id, { country });
+		return country;
+	}
+
+	async function walkArea(start: Area, deadline: number): Promise<string | null> {
 		let area = start;
 		for (let hops = 0; ; hops++) {
 			const code = countryFromCodes(area['iso-3166-1-codes']);
@@ -92,6 +107,31 @@ export function createMusicBrainzClient(opts: {
 	}
 
 	return {
+		/**
+		 * Look up to BULK_LIMIT artists by MBID in one search request. Returns only definite
+		 * answers; artists that need an area walk, or weren't found, are left for
+		 * resolveArtistCountry.
+		 */
+		async resolveMany(
+			artists: { name: string; mbid?: string }[],
+			opts: { deadline?: number } = {}
+		): Promise<Map<string, string | null>> {
+			const ids = artists.flatMap((a) => (a.mbid ? [a.mbid] : [])).slice(0, BULK_LIMIT);
+			const answers = new Map<string, string | null>();
+			if (ids.length === 0) return answers;
+
+			const results = await get(
+				'/artist',
+				{ query: `arid:(${ids.join(' OR ')})`, limit: String(BULK_LIMIT) },
+				opts.deadline ?? Infinity
+			);
+			for (const found of results?.artists ?? []) {
+				if (!ids.includes(found.id) || !found.country) continue;
+				answers.set(found.id, isRealCountry(found.country) ? found.country : null);
+			}
+			return answers;
+		},
+
 		async resolveArtistCountry(
 			artist: { name: string; mbid?: string },
 			opts: { deadline?: number } = {}

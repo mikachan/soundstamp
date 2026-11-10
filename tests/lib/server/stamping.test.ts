@@ -221,3 +221,50 @@ describe('review fixes', () => {
 		expect(Object.keys(stored ?? {}).sort()).toEqual(['name:a', 'name:b']);
 	});
 });
+
+describe('batched lookups', () => {
+	function setup(bulk: Record<string, string | null> | Error, answers: Parameters<typeof fakeMusicBrainz>[0] = {}) {
+		const clock = { t: 0 };
+		const lastfm = fakeLastfm({
+			artists: [artist('A', 50, 'a'), artist('B', 30, 'b'), artist('C', 15, 'c'), artist('NoId', 5)]
+		});
+		const mb = fakeMusicBrainz(answers, clock, 1000, bulk);
+		return { deps: fakeDeps(lastfm.client, mb.client, clock), mb };
+	}
+
+	test('resolves MBID artists in one bulk request, then the rest one by one', async () => {
+		const { deps, mb } = setup({ a: 'IS', b: null }, { C: 'GB', NoId: 'JP' });
+		const result = await stampNextBatch(deps, 'rj', 8000);
+		expect(mb.bulkCalls).toEqual([['a', 'b', 'c']]);
+		expect(mb.asked).toEqual(['C', 'NoId']);
+		expect(await deps.artists.get('mbid:a')).toEqual({ country: 'IS', resolvedAt: 1000 });
+		expect(await deps.artists.get('mbid:b')).toEqual({ country: null, resolvedAt: 1000 });
+		expect(result).toMatchObject({ status: 'ok', remaining: 0 });
+	});
+
+	test('skips artists already in the shared cache when building the bulk request', async () => {
+		const { deps, mb } = setup({ b: 'GB', c: 'SE' }, { NoId: 'JP' });
+		await deps.artists.set('mbid:a', known('IS'));
+		await stampNextBatch(deps, 'rj', 8000);
+		expect(mb.bulkCalls).toEqual([['b', 'c']]);
+	});
+
+	test('a bulk failure ends the batch with the matching status', async () => {
+		const { deps, mb } = setup(new MusicBrainzUnavailable('503'));
+		const result = await stampNextBatch(deps, 'rj', 8000);
+		expect(result).toMatchObject({ status: 'unavailable', remaining: 4 });
+		expect(mb.asked).toEqual([]);
+	});
+});
+
+test('does not repeat a bulk request for MBIDs it could not answer', async () => {
+	const clock = { t: 0 };
+	const lastfm = fakeLastfm({ artists: [artist('A', 50, 'a'), artist('B', 30, 'b')] });
+	// Bulk can't answer B (it needs an area walk); the individual lookup is slow, so B stays pending.
+	const mb = fakeMusicBrainz({ B: new DeadlineReached('late') }, clock, 1000, { a: 'IS' });
+	const deps = fakeDeps(lastfm.client, mb.client, clock);
+	await stampNextBatch(deps, 'rj', 8000);
+	await stampNextBatch(deps, 'rj', 8000);
+	expect(mb.bulkCalls).toEqual([['a', 'b']]);
+	expect(mb.asked).toEqual(['B', 'B']);
+});

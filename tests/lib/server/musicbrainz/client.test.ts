@@ -4,6 +4,7 @@ import {
 	DeadlineReached,
 	MusicBrainzUnavailable
 } from '#lib/server/musicbrainz/client';
+import { memoryKV } from '#lib/server/store/types';
 
 type Route = { status?: number; body?: unknown; throws?: boolean };
 
@@ -14,7 +15,7 @@ function setup(routes: Record<string, Route>) {
 	const fetch = (async (input: string | URL, init?: RequestInit) => {
 		const url = new URL(input.toString());
 		requests.push({ url, userAgent: new Headers(init?.headers).get('User-Agent') });
-		const route = routes[decodeURIComponent(url.pathname + url.search)];
+		const route = routes[decodeURIComponent((url.pathname + url.search).replace(/\+/g, ' '))];
 		if (!route) return new Response('{}', { status: 404 });
 		if (route.throws) throw new TypeError('fetch failed');
 		return new Response(JSON.stringify(route.body ?? {}), { status: route.status ?? 200 });
@@ -210,5 +211,68 @@ describe('review fixes', () => {
 			mb.resolveArtistCountry({ name: 'X', mbid: 'x' }, { deadline: 12_500 })
 		).rejects.toBeInstanceOf(DeadlineReached);
 		expect(requests).toHaveLength(0);
+	});
+});
+
+describe('resolveMany (batched lookups)', () => {
+	const bulk = (ids: string[]) =>
+		`/ws/2/artist?query=arid:(${ids.join(' OR ')})&limit=100&fmt=json`;
+
+	test('looks up many MBIDs in one search request', async () => {
+		const { mb, requests } = setup({
+			[bulk(['a', 'b', 'c', 'd'])]: {
+				body: {
+					artists: [
+						{ id: 'a', country: 'IS' },
+						{ id: 'b', country: 'XW' },
+						{ id: 'c', area: { id: 'glasgow', type: 'City' } }
+					]
+				}
+			}
+		});
+		const result = await mb.resolveMany([
+			{ name: 'A', mbid: 'a' },
+			{ name: 'B', mbid: 'b' },
+			{ name: 'C', mbid: 'c' },
+			{ name: 'D', mbid: 'd' }
+		]);
+		expect(requests).toHaveLength(1);
+		expect(requests[0].userAgent).toBe('Soundstamp/0.1 ( https://example.com/contact )');
+		// Definite answers only: C needs an area walk and D wasn't found, so both are left out.
+		expect(result).toEqual(new Map([['a', 'IS'], ['b', null]]));
+	});
+
+	test('sends no request for an empty list', async () => {
+		const { mb, requests } = setup({});
+		expect(await mb.resolveMany([])).toEqual(new Map());
+		expect(requests).toHaveLength(0);
+	});
+
+	test('503 throws MusicBrainzUnavailable', async () => {
+		const { mb } = setup({ [bulk(['a'])]: { status: 503 } });
+		await expect(mb.resolveMany([{ name: 'A', mbid: 'a' }])).rejects.toBeInstanceOf(
+			MusicBrainzUnavailable
+		);
+	});
+});
+
+describe('area cache', () => {
+	test("reuses a cached area's country instead of walking it again", async () => {
+		const areas = memoryKV<{ country: string | null }>();
+		const requests: string[] = [];
+		const fetch = (async (u: string | URL) => {
+			const url = new URL(u.toString());
+			requests.push(url.pathname);
+			if (url.pathname.startsWith('/ws/2/artist/')) return Response.json({ area: { id: 'london' } });
+			return Response.json({
+				relations: [{ type: 'part of', direction: 'backward', area: { id: 'uk', 'iso-3166-1-codes': ['GB'] } }]
+			});
+		}) as typeof globalThis.fetch;
+		const mb = createMusicBrainzClient({ fetch, contact: 'c', beforeRequest: async () => {}, areas });
+
+		expect(await mb.resolveArtistCountry({ name: 'One', mbid: '1' })).toBe('GB');
+		expect(await mb.resolveArtistCountry({ name: 'Two', mbid: '2' })).toBe('GB');
+		expect(requests.filter((p) => p.startsWith('/ws/2/area/'))).toHaveLength(1);
+		expect(await areas.get('london')).toEqual({ country: 'GB' });
 	});
 });

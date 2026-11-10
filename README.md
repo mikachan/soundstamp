@@ -24,6 +24,8 @@ npm test          # unit and component tests
 npm run check     # type check
 ```
 
+If `netlify dev` shows "Could not proxy request" or pages load without working scripts, a leftover production build is being served. Delete it with `rm -rf build .netlify/v1 .netlify/functions-internal` and restart.
+
 Each production deploy on Netlify's free plan costs 15 of its 300 credits, so do most work locally and deploy in batches.
 
 ## Before going public
