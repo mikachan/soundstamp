@@ -1,0 +1,50 @@
+import type { Passport } from '../passport/types';
+import type { BatchResult } from '../server/stamping';
+
+export type StampStatus = BatchResult['status'];
+
+const QUEUED_DELAY_MS = 3000;
+const FIRST_BACKOFF_MS = 3000;
+const MAX_BACKOFF_MS = 30_000;
+
+/** Ask the server to stamp batches until nothing is left, backing off when MusicBrainz is unhappy. */
+export function startPolling(opts: {
+	username: string;
+	fetch: typeof fetch;
+	onUpdate: (passport: Passport, status: StampStatus) => void;
+	sleep: (ms: number) => Promise<void>;
+}): { stop(): void; done: Promise<void> } {
+	let stopped = false;
+	let backoff = 0;
+	const nextBackoff = () => (backoff = backoff ? Math.min(backoff * 2, MAX_BACKOFF_MS) : FIRST_BACKOFF_MS);
+
+	async function loop() {
+		while (!stopped) {
+			let result: BatchResult;
+			try {
+				const response = await opts.fetch(`/api/${encodeURIComponent(opts.username)}/stamp`, {
+					method: 'POST'
+				});
+				if (!response.ok) throw new Error(`stamp failed: ${response.status}`);
+				result = await response.json();
+			} catch {
+				await opts.sleep(nextBackoff());
+				continue;
+			}
+			if (stopped) return;
+
+			opts.onUpdate(result.passport, result.status);
+			if (result.remaining === 0) return;
+			if (result.status === 'ok') backoff = 0;
+			else if (result.status === 'queued') await opts.sleep(QUEUED_DELAY_MS);
+			else await opts.sleep(nextBackoff());
+		}
+	}
+
+	return {
+		stop: () => {
+			stopped = true;
+		},
+		done: loop()
+	};
+}

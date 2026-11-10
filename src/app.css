@@ -1,0 +1,61 @@
+:root {
+	--paper: #f6f1e7;
+	--card: #fffaf0;
+	--ink: #12403f;
+	--muted: #5b6a68;
+	--rule: #d9cfbd;
+	--stamp: #b23a2e;
+	--land: #e4dbc9;
+	--visited: #12403f;
+	--font-display: 'Iowan Old Style', 'Palatino Linotype', Georgia, serif;
+	--font-body: system-ui, -apple-system, 'Segoe UI', sans-serif;
+	color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+	:root:not([data-theme='light']) {
+		--paper: #0f1d1c;
+		--card: #162a29;
+		--ink: #e5efe9;
+		--muted: #9fb3ae;
+		--rule: #2c4340;
+		--stamp: #f08a7a;
+		--land: #233a38;
+		--visited: #7fd1c2;
+		color-scheme: dark;
+	}
+}
+
+:root[data-theme='dark'] {
+	--paper: #0f1d1c;
+	--card: #162a29;
+	--ink: #e5efe9;
+	--muted: #9fb3ae;
+	--rule: #2c4340;
+	--stamp: #f08a7a;
+	--land: #233a38;
+	--visited: #7fd1c2;
+	color-scheme: dark;
+}
+
+*,
+*::before,
+*::after {
+	box-sizing: border-box;
+}
+
+body {
+	margin: 0;
+	background: var(--paper);
+	color: var(--ink);
+	font: 1rem/1.5 var(--font-body);
+}
+
+a {
+	color: inherit;
+}
+
+button,
+input {
+	font: inherit;
+}
