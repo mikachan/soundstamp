@@ -271,7 +271,9 @@ export async function stampNextBatch(
 		} catch (error) {
 			const stop = stopStatus(error);
 			if (stop !== null) {
-				if (stop !== 'stop') status = stop;
+				// A busy MusicBrainz after some progress is just the end of this batch, not an outage.
+				const madeProgress = Object.keys(fresh).length > 0;
+				if (stop !== 'stop' && !(stop === 'unavailable' && madeProgress)) status = stop;
 				break;
 			}
 			// Anything else would fail the same way every time: count the artist as unknown

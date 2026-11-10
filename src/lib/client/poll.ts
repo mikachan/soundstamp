@@ -7,6 +7,8 @@ export type StampStatus = BatchResult['status'];
 const QUEUED_DELAY_MS = 3000;
 const FIRST_BACKOFF_MS = 3000;
 const MAX_BACKOFF_MS = 30_000;
+// MusicBrainz is often briefly busy; only tell the visitor once it keeps happening.
+const BUSY_STREAK_TO_REPORT = 3;
 
 /** Ask the server to stamp batches until nothing is left, backing off when MusicBrainz is unhappy. */
 export function startPolling(opts: {
@@ -20,6 +22,7 @@ export function startPolling(opts: {
 }): { stop(): void; done: Promise<void> } {
 	let stopped = false;
 	let backoff = 0;
+	let busyStreak = 0;
 	const nextBackoff = () => (backoff = backoff ? Math.min(backoff * 2, MAX_BACKOFF_MS) : FIRST_BACKOFF_MS);
 
 	async function loop() {
@@ -44,7 +47,8 @@ export function startPolling(opts: {
 			}
 			if (stopped) return;
 
-			opts.onUpdate(result.passport, result.status);
+			busyStreak = result.status === 'ok' ? 0 : busyStreak + 1;
+			opts.onUpdate(result.passport, busyStreak >= BUSY_STREAK_TO_REPORT ? result.status : 'ok');
 			if (result.remaining === 0) return;
 			if (result.status === 'ok') backoff = 0;
 			else if (result.status === 'queued') await opts.sleep(QUEUED_DELAY_MS);

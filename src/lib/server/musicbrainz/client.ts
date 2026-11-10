@@ -34,6 +34,8 @@ export function createMusicBrainzClient(opts: {
 	contact: string;
 	beforeRequest: () => Promise<void>;
 	now?: () => number;
+	/** Called when MusicBrainz says it's busy (503), so callers can back off together. */
+	onBusy?: () => Promise<void>;
 	/** Shared area id → country cache; many artists share a city. */
 	areas?: KV<{ country: string | null }>;
 }) {
@@ -57,6 +59,7 @@ export function createMusicBrainzClient(opts: {
 			throw new MusicBrainzUnavailable(`MusicBrainz request failed: ${path}`, { cause });
 		}
 		// 408/429 are transient: retrying later may succeed, so never cache them as unknown.
+		if (response.status === 503 || response.status === 429) await opts.onBusy?.();
 		if (response.status >= 500 || response.status === 408 || response.status === 429) {
 			throw new MusicBrainzUnavailable(`MusicBrainz returned ${response.status}: ${path}`);
 		}

@@ -48,7 +48,6 @@ test('waits 3 s while queued', async () => {
 	]);
 	await h.poller.done;
 	expect(h.sleeps).toEqual([3000]);
-	expect(h.updates[0].status).toBe('queued');
 });
 
 test('backs off exponentially to 30 s on failures, and resets after ok', async () => {
@@ -95,4 +94,18 @@ test('includes a non-default period in the stamp URL', async () => {
 	}) as typeof globalThis.fetch;
 	await startPolling({ username: 'rj', period: 'overall', fetch, sleep: async () => {}, onUpdate: () => {} }).done;
 	expect(urls).toEqual(['/api/rj/stamp?period=overall']);
+});
+
+test('only reports busy statuses after three in a row', async () => {
+	const h = harness([
+		{ status: 'queued', remaining: 5 },
+		{ status: 'unavailable', remaining: 5 },
+		{ status: 'ok', remaining: 4 },
+		{ status: 'queued', remaining: 4 },
+		{ status: 'unavailable', remaining: 4 },
+		{ status: 'unavailable', remaining: 4 },
+		{ status: 'ok', remaining: 0 }
+	]);
+	await h.poller.done;
+	expect(h.updates.map((u) => u.status)).toEqual(['ok', 'ok', 'ok', 'ok', 'ok', 'unavailable', 'ok']);
 });

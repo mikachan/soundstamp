@@ -324,3 +324,17 @@ describe('isNameShared', () => {
 		expect(await mb.isNameShared('Múm')).toBe(false);
 	});
 });
+
+test('a 503 tells the caller MusicBrainz is busy', async () => {
+	let busy = 0;
+	const mb = createMusicBrainzClient({
+		fetch: (async () => new Response('{}', { status: 503 })) as typeof fetch,
+		contact: 'c',
+		beforeRequest: async () => {},
+		onBusy: async () => {
+			busy++;
+		}
+	});
+	await expect(mb.resolveArtistCountry({ name: 'X', mbid: 'x' })).rejects.toBeInstanceOf(MusicBrainzUnavailable);
+	expect(busy).toBe(1);
+});

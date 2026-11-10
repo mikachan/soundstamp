@@ -122,7 +122,8 @@ describe('stampNextBatch', () => {
 	test('MusicBrainzUnavailable stops the batch without recording that artist', async () => {
 		const { deps } = setup({ A: 'IS', B: new MusicBrainzUnavailable('503') });
 		const result = await stampNextBatch(deps, 'rj', 8000);
-		expect(result).toMatchObject({ status: 'unavailable', remaining: 2 });
+		// A was stamped first, so this is a normal end of batch rather than an outage.
+		expect(result).toMatchObject({ status: 'ok', remaining: 2 });
 		expect(await deps.artists.get('name:a')).not.toBeNull();
 		expect(await deps.artists.get('name:b')).toBeNull();
 	});
@@ -346,4 +347,21 @@ test('destination candidates the user has already heard are never looked up', ()
 		heard: ['heard before']
 	});
 	expect(pendingQueue(s, new Map([['name:a', known('IS')]])).map((q) => q.name)).toEqual(['New One']);
+});
+
+test('a 503 before any progress reports unavailable', async () => {
+	const clock = { t: 0 };
+	const lastfm = fakeLastfm({ artists: [artist('A', 50)] });
+	const mb = fakeMusicBrainz({ A: new MusicBrainzUnavailable('busy') }, clock);
+	const result = await stampNextBatch(fakeDeps(lastfm.client, mb.client, clock), 'rj', 8000);
+	expect(result.status).toBe('unavailable');
+});
+
+test('a 503 after the batch has made progress reports ok, not unavailable', async () => {
+	const clock = { t: 0 };
+	const lastfm = fakeLastfm({ artists: [artist('A', 50), artist('B', 30), artist('C', 20)] });
+	const mb = fakeMusicBrainz({ A: 'IS', B: new MusicBrainzUnavailable('busy') }, clock);
+	const deps = fakeDeps(lastfm.client, mb.client, clock);
+	const result = await stampNextBatch(deps, 'rj', 8000);
+	expect(result).toMatchObject({ status: 'ok', remaining: 2 });
 });
