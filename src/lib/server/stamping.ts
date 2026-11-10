@@ -3,8 +3,8 @@ import type { Passport, Snapshot } from '../passport/types';
 import { artistKey } from './artist-key';
 import type { createLastfmClient } from './lastfm/client';
 import type { createMusicBrainzClient } from './musicbrainz/client';
+import { DeadlineReached, MusicBrainzUnavailable } from './musicbrainz/client';
 import { ThrottleBusy } from './store/throttle';
-import { MusicBrainzUnavailable } from './musicbrainz/client';
 import type { ArtistRecord, KV } from './store/types';
 
 export const SNAPSHOT_TTL_MS = 24 * 3600 * 1000;
@@ -13,14 +13,19 @@ const TOP_TRACKS = 500;
 const SIMILAR_SEEDS = 10;
 const SIMILAR_PER_SEED = 20;
 const MAX_CANDIDATES = 50;
-const DEFAULT_BUDGET_MS = 6000;
+// Every MusicBrainz request also checks this deadline, so a batch ends within ~8 s.
+const DEFAULT_BUDGET_MS = 5000;
 const READ_CONCURRENCY = 50;
 
 export interface StampingDeps {
 	lastfm: ReturnType<typeof createLastfmClient>;
 	mb: ReturnType<typeof createMusicBrainzClient>;
+	/** Shared artist → country cache, across all users. */
 	artists: KV<ArtistRecord>;
+	/** last.fm data per user. Only getSnapshot writes it. */
 	snapshots: KV<Snapshot>;
+	/** Resolved records per user, merged on write so concurrent batches don't lose each other's work. */
+	records: KV<Record<string, ArtistRecord>>;
 	now: () => number;
 }
 
@@ -31,7 +36,7 @@ export type BatchResult =
 
 type QueueItem = { name: string; mbid?: string };
 
-const snapshotKey = (username: string) => username.toLowerCase();
+const userKey = (username: string) => username.toLowerCase();
 
 function candidates(s: Snapshot): QueueItem[] {
 	const own = new Set(s.artists.map(artistKey));
@@ -49,13 +54,18 @@ function candidates(s: Snapshot): QueueItem[] {
 		.map((c) => c.item);
 }
 
+async function mergeRecords(deps: StampingDeps, username: string, fresh: Record<string, ArtistRecord>) {
+	if (Object.keys(fresh).length === 0) return;
+	const latest = (await deps.records.get(userKey(username))) ?? {};
+	await deps.records.set(userKey(username), { ...latest, ...fresh });
+}
+
 export async function getSnapshot(
 	deps: StampingDeps,
 	username: string,
 	opts: { refresh?: boolean } = {}
 ): Promise<Snapshot> {
-	const key = snapshotKey(username);
-	const existing = await deps.snapshots.get(key);
+	const existing = await deps.snapshots.get(userKey(username));
 	if (existing && !opts.refresh && deps.now() - existing.createdAt < SNAPSHOT_TTL_MS) return existing;
 
 	const user = await deps.lastfm.getUser(username);
@@ -70,33 +80,26 @@ export async function getSnapshot(
 			artists: await deps.lastfm.getSimilar(seed, SIMILAR_PER_SEED).catch(() => [])
 		}))
 	);
-
-	const snapshot: Snapshot = {
-		username: user.name,
-		createdAt: deps.now(),
-		user,
-		artists,
-		tracks,
-		similar,
-		records: {}
-	};
+	const snapshot: Snapshot = { username: user.name, createdAt: deps.now(), user, artists, tracks, similar };
 
 	// Pick up countries already resolved for other users.
 	const keys = [...new Set([...artists.map(artistKey), ...candidates(snapshot).map(artistKey)])];
+	const known: Record<string, ArtistRecord> = {};
 	for (let i = 0; i < keys.length; i += READ_CONCURRENCY) {
 		const chunk = keys.slice(i, i + READ_CONCURRENCY);
 		const found = await Promise.all(chunk.map((k) => deps.artists.get(k)));
 		chunk.forEach((k, j) => {
-			if (found[j]) snapshot.records[k] = found[j];
+			if (found[j]) known[k] = found[j];
 		});
 	}
 
-	await deps.snapshots.set(snapshotKey(user.name), snapshot);
+	await deps.snapshots.set(userKey(user.name), snapshot);
+	await mergeRecords(deps, user.name, known);
 	return snapshot;
 }
 
-export async function loadRecords(_deps: StampingDeps, s: Snapshot): Promise<Map<string, ArtistRecord>> {
-	return new Map(Object.entries(s.records));
+export async function loadRecords(deps: StampingDeps, s: Snapshot): Promise<Map<string, ArtistRecord>> {
+	return new Map(Object.entries((await deps.records.get(userKey(s.username))) ?? {}));
 }
 
 /**
@@ -139,43 +142,50 @@ export async function stampNextBatch(
 ): Promise<BatchResult> {
 	const s = await getSnapshot(deps, username);
 	const records = await loadRecords(deps, s);
-	const start = deps.now();
+	const deadline = deps.now() + budgetMs;
+	const fresh: Record<string, ArtistRecord> = {};
 	let status: BatchResult['status'] = 'ok';
-	let changed = false;
 
 	for (const item of pendingQueue(s, records)) {
-		if (deps.now() - start >= budgetMs) break;
+		if (deps.now() >= deadline) break;
 		const key = artistKey(item);
-
-		const cached = await deps.artists.get(key);
-		if (cached) {
-			records.set(key, cached);
-			changed = true;
-			continue;
-		}
-
-		let country: string | null;
 		try {
-			country = await deps.mb.resolveArtistCountry(item);
+			let record = await deps.artists.get(key);
+			if (!record) {
+				record = { country: await deps.mb.resolveArtistCountry(item, { deadline }), resolvedAt: deps.now() };
+				await deps.artists.set(key, record);
+			}
+			records.set(key, record);
+			fresh[key] = record;
 		} catch (error) {
-			if (error instanceof ThrottleBusy) status = 'queued';
-			else if (error instanceof MusicBrainzUnavailable) status = 'unavailable';
-			else throw error;
-			break;
+			if (error instanceof DeadlineReached) break;
+			if (error instanceof ThrottleBusy) {
+				status = 'queued';
+				break;
+			}
+			if (error instanceof MusicBrainzUnavailable) {
+				status = 'unavailable';
+				break;
+			}
+			// Anything else would fail the same way every time: count the artist as unknown
+			// for this user (not in the shared cache) so the rest of the queue can move on.
+			console.error(`stamping ${item.name} failed`, error);
+			const unknown = { country: null, resolvedAt: deps.now() };
+			records.set(key, unknown);
+			fresh[key] = unknown;
 		}
-		const record = { country, resolvedAt: deps.now() };
-		await deps.artists.set(key, record);
-		records.set(key, record);
-		changed = true;
 	}
 
-	if (changed) {
-		s.records = Object.fromEntries(records);
-		await deps.snapshots.set(snapshotKey(s.username), s);
-	}
+	await mergeRecords(deps, s.username, fresh);
 	return {
 		status,
 		passport: assemblePassport(s, records),
 		remaining: pendingQueue(s, records).length
 	};
+}
+
+/** The passport as it stands, plus how many lookups are still queued (including destination candidates). */
+export async function currentPassport(deps: StampingDeps, s: Snapshot) {
+	const records = await loadRecords(deps, s);
+	return { passport: assemblePassport(s, records), remaining: pendingQueue(s, records).length };
 }

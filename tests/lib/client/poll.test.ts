@@ -2,18 +2,19 @@ import { expect, test } from 'vitest';
 import { startPolling } from '#lib/client/poll';
 import { passport } from '../passport/passport-fixture';
 
-type Reply = { status: 'ok' | 'queued' | 'unavailable'; remaining: number } | 'network' | 500;
+type Reply = { status: 'ok' | 'queued' | 'unavailable'; remaining: number } | 'network' | 500 | 404;
 
 function harness(replies: Reply[]) {
 	const urls: string[] = [];
 	const sleeps: number[] = [];
 	const updates: { pending: number; status: string }[] = [];
+	const errors: string[] = [];
 	let i = 0;
 	const fetch = (async (url: string, init?: RequestInit) => {
 		urls.push(`${init?.method} ${url}`);
 		const reply = replies[Math.min(i++, replies.length - 1)];
 		if (reply === 'network') throw new TypeError('offline');
-		if (reply === 500) return new Response('{}', { status: 500 });
+		if (reply === 500 || reply === 404) return new Response('{}', { status: reply });
 		return Response.json({ ...reply, passport: passport({ pendingArtists: reply.remaining }) });
 	}) as typeof globalThis.fetch;
 	const poller = startPolling({
@@ -22,9 +23,10 @@ function harness(replies: Reply[]) {
 		sleep: async (ms) => {
 			sleeps.push(ms);
 		},
-		onUpdate: (p, status) => updates.push({ pending: p.pendingArtists, status })
+		onUpdate: (p, status) => updates.push({ pending: p.pendingArtists, status }),
+		onError: (terminal) => errors.push(terminal ? 'terminal' : 'retrying')
 	});
-	return { poller, urls, sleeps, updates };
+	return { poller, urls, sleeps, updates, errors };
 }
 
 test('keeps posting while work remains and stops at remaining 0', async () => {
@@ -70,4 +72,17 @@ test('stop() halts the loop', async () => {
 	h.poller.stop();
 	await h.poller.done;
 	expect(h.urls.length).toBeLessThanOrEqual(1);
+});
+
+test('reports failed requests through onError so the page can say it is retrying', async () => {
+	const h = harness(['network', 500, { status: 'ok', remaining: 0 }]);
+	await h.poller.done;
+	expect(h.errors).toEqual(['retrying', 'retrying']);
+});
+
+test('stops on a 4xx response and reports it as terminal', async () => {
+	const h = harness([404, { status: 'ok', remaining: 0 }]);
+	await h.poller.done;
+	expect(h.urls).toHaveLength(1);
+	expect(h.errors).toEqual(['terminal']);
 });

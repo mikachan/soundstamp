@@ -13,8 +13,19 @@ test('deletes snapshots older than 7 days and keeps newer ones', async () => {
 	await kv.set('edge', snapshot({ createdAt: now - 7 * DAY + 1 }));
 	await kv.set('fresh', snapshot({ createdAt: now - DAY }));
 
-	expect(await cleanupSnapshots(kv, now)).toBe(1);
+	expect(await cleanupSnapshots(kv, memoryKV(), now)).toBe(1);
 	expect((await kv.list()).sort()).toEqual(['edge', 'fresh']);
+});
+
+test("deletes a stale user's records along with their snapshot", async () => {
+	const snapshots = memoryKV<Snapshot>();
+	const records = memoryKV<Record<string, ArtistRecord>>();
+	await snapshots.set('old', snapshot({ createdAt: 0 }));
+	await records.set('old', { 'mbid:x': known('IS') });
+	await records.set('fresh', { 'mbid:x': known('IS') });
+	await snapshots.set('fresh', snapshot({ createdAt: 30 * DAY }));
+	await cleanupSnapshots(snapshots, records, 30 * DAY);
+	expect(await records.list()).toEqual(['fresh']);
 });
 
 test('never touches the shared artist cache', async () => {
@@ -22,6 +33,6 @@ test('never touches the shared artist cache', async () => {
 	const artists = memoryKV<ArtistRecord>();
 	await artists.set('mbid:x', known('IS'));
 	await snapshots.set('old', snapshot({ createdAt: 0 }));
-	await cleanupSnapshots(snapshots, 30 * DAY);
+	await cleanupSnapshots(snapshots, memoryKV(), 30 * DAY);
 	expect(await artists.get('mbid:x')).toEqual(known('IS'));
 });

@@ -134,3 +134,14 @@ describe('stamp contents', () => {
 		expect(p.stamps[0].tracks[0].name).toBe('T0');
 	});
 });
+
+test('duplicate track entries with the same URL are merged, keeping the higher playcount', () => {
+	const { s, records } = base();
+	s.tracks = [
+		track('Hoppípolla', 'Sigur Rós', 50, 'sr'),
+		track('Hoppípolla', 'Sigur Rós', 20)
+	];
+	const iceland = assemblePassport(s, records).stamps.find((st) => st.country === 'IS')!;
+	expect(iceland.tracks).toHaveLength(1);
+	expect(iceland.tracks[0].playcount).toBe(50);
+});

@@ -1,5 +1,9 @@
 import { describe, expect, test } from 'vitest';
-import { createMusicBrainzClient, MusicBrainzUnavailable } from '#lib/server/musicbrainz/client';
+import {
+	createMusicBrainzClient,
+	DeadlineReached,
+	MusicBrainzUnavailable
+} from '#lib/server/musicbrainz/client';
 
 type Route = { status?: number; body?: unknown; throws?: boolean };
 
@@ -163,5 +167,48 @@ describe('failures', () => {
 			}
 		});
 		await expect(mb.resolveArtistCountry({ name: 'X' })).rejects.toBeInstanceOf(Busy);
+	});
+});
+
+describe('review fixes', () => {
+	test('ambiguous exact-name matches resolve to null', async () => {
+		const { mb } = setup({
+			[search('Nirvana')]: {
+				body: {
+					artists: [
+						{ name: 'Nirvana', score: 100, country: 'US' },
+						{ name: 'Nirvana', score: 100, country: 'GB' }
+					]
+				}
+			}
+		});
+		expect(await mb.resolveArtistCountry({ name: 'Nirvana' })).toBeNull();
+	});
+
+	test.each([429, 408])('%i throws MusicBrainzUnavailable instead of caching unknown', async (status) => {
+		const { mb } = setup({ '/ws/2/artist/x?fmt=json': { status } });
+		await expect(mb.resolveArtistCountry({ name: 'X', mbid: 'x' })).rejects.toBeInstanceOf(
+			MusicBrainzUnavailable
+		);
+	});
+
+	test('a request that could run past the deadline throws DeadlineReached before sending', async () => {
+		let t = 10_000;
+		const requests: string[] = [];
+		const mb = createMusicBrainzClient({
+			fetch: (async (u: string | URL) => {
+				requests.push(u.toString());
+				return Response.json({ area: { id: 'a1' } });
+			}) as typeof fetch,
+			contact: 'c',
+			beforeRequest: async () => {
+				t += 1000;
+			},
+			now: () => t
+		});
+		await expect(
+			mb.resolveArtistCountry({ name: 'X', mbid: 'x' }, { deadline: 12_500 })
+		).rejects.toBeInstanceOf(DeadlineReached);
+		expect(requests).toHaveLength(0);
 	});
 });

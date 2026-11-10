@@ -1,7 +1,6 @@
 import { redirect } from '@sveltejs/kit';
-import { assemblePassport } from '#lib/passport/assemble.js';
 import { appDeps, rethrowAsHttp } from '#lib/server/app-deps.js';
-import { getSnapshot, loadRecords } from '#lib/server/stamping.js';
+import { currentPassport, getSnapshot } from '#lib/server/stamping.js';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ params, locals }) => {
@@ -12,5 +11,5 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 	if (snapshot.username !== params.username) {
 		redirect(301, `/${encodeURIComponent(snapshot.username)}`);
 	}
-	return { passport: assemblePassport(snapshot, await loadRecords(deps, snapshot)) };
+	return currentPassport(deps, snapshot);
 };

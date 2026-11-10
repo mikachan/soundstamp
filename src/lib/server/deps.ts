@@ -18,6 +18,7 @@ export function createDeps(env: { LASTFM_API_KEY?: string; MB_CONTACT?: string }
 		mb: createMusicBrainzClient({ fetch, contact: env.MB_CONTACT, beforeRequest: throttle.wait }),
 		artists: blobsKV<ArtistRecord>('artists'),
 		snapshots: blobsKV<Snapshot>('snapshots'),
+		records: blobsKV<Record<string, ArtistRecord>>('records'),
 		now: Date.now
 	};
 }

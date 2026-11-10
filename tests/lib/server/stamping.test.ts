@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { getSnapshot, loadRecords, pendingQueue, stampNextBatch } from '#lib/server/stamping';
 import { LastfmUserNotFound } from '#lib/server/lastfm/client';
-import { MusicBrainzUnavailable } from '#lib/server/musicbrainz/client';
+import { DeadlineReached, MusicBrainzUnavailable } from '#lib/server/musicbrainz/client';
 import { ThrottleBusy } from '#lib/server/store/throttle';
 import type { ArtistRecord } from '#lib/server/store/types';
 import type { SimilarArtist } from '#lib/server/lastfm/types';
@@ -148,5 +148,76 @@ describe('stampNextBatch', () => {
 		const second = await stampNextBatch(deps, 'rj', 8000);
 		expect(mb.asked).toEqual(['A', 'B', 'C']);
 		expect(second.remaining).toBe(0);
+	});
+});
+
+describe('review fixes', () => {
+	function setup(answers: Parameters<typeof fakeMusicBrainz>[0], names = ['A', 'B', 'C']) {
+		const clock = { t: 0 };
+		const lastfm = fakeLastfm({ artists: names.map((n, i) => artist(n, 100 - i)) });
+		const mb = fakeMusicBrainz(answers, clock);
+		return { deps: fakeDeps(lastfm.client, mb.client, clock), mb, clock, lastfm };
+	}
+
+	test('an item that fails unexpectedly is marked unknown for this user and the queue moves on', async () => {
+		const { deps, mb } = setup({ A: 'IS', B: new Error('blob key too long'), C: 'JP' });
+		const result = await stampNextBatch(deps, 'rj', 8000);
+		expect(mb.asked).toEqual(['A', 'B', 'C']);
+		expect(result).toMatchObject({ status: 'ok', remaining: 0 });
+		expect(result.passport.unknownArtists).toBe(1);
+		expect(await deps.artists.get('name:b')).toBeNull();
+	});
+
+	test('DeadlineReached ends the batch as ok without recording the item', async () => {
+		const { deps } = setup({ A: new DeadlineReached('late') });
+		const result = await stampNextBatch(deps, 'rj', 8000);
+		expect(result).toMatchObject({ status: 'ok', remaining: 3 });
+		expect(await deps.artists.get('name:a')).toBeNull();
+	});
+
+	test('passes an absolute deadline of batch start + budget', async () => {
+		const { deps, mb, clock } = setup({ A: 'IS', B: 'GB', C: 'JP' });
+		await getSnapshot(deps, 'rj');
+		clock.t = 50_000;
+		await stampNextBatch(deps, 'rj', 5000);
+		expect(mb.deadlines).toEqual([55_000, 55_000, 55_000]);
+	});
+
+	test('a refresh during a batch is not overwritten by the batch', async () => {
+		const clock = { t: 0 };
+		const lastfm = fakeLastfm({ artists: [artist('A', 2), artist('B', 1)] });
+		let deps!: ReturnType<typeof fakeDeps>;
+		const mb = fakeMusicBrainz(
+			{
+				A: async () => {
+					clock.t = 99_000;
+					await getSnapshot(deps, 'rj', { refresh: true });
+					return 'IS';
+				}
+			},
+			clock
+		);
+		deps = fakeDeps(lastfm.client, mb.client, clock);
+		await stampNextBatch(deps, 'rj', 8000);
+		expect((await deps.snapshots.get('rj'))?.createdAt).toBe(99_000);
+	});
+
+	test('records written by another batch meanwhile are kept', async () => {
+		let deps!: ReturnType<typeof fakeDeps>;
+		const clock = { t: 0 };
+		const mb = fakeMusicBrainz(
+			{
+				A: async () => {
+					const theirs = (await deps.records.get('rj')) ?? {};
+					await deps.records.set('rj', { ...theirs, 'name:b': known('GB') });
+					return 'IS';
+				}
+			},
+			clock
+		);
+		deps = fakeDeps(fakeLastfm({ artists: [artist('A', 2), artist('B', 1)] }).client, mb.client, clock);
+		await stampNextBatch(deps, 'rj', 1000);
+		const stored = await deps.records.get('rj');
+		expect(Object.keys(stored ?? {}).sort()).toEqual(['name:a', 'name:b']);
 	});
 });

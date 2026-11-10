@@ -36,7 +36,11 @@ export function assemblePassport(s: Snapshot, records: Map<string, ArtistRecord>
 	const artistByMbid = new Map(s.artists.filter((a) => a.mbid).map((a) => [a.mbid!, a]));
 	const artistByName = new Map(s.artists.map((a) => [normaliseName(a.name), a]));
 	const tracksByCountry = new Map<string, Stamp['tracks']>();
-	for (const t of s.tracks) {
+	// last.fm sometimes lists one track twice (with and without an mbid) under the same URL.
+	const seenTracks = new Set<string>();
+	for (const t of [...s.tracks].sort((a, b) => b.playcount - a.playcount)) {
+		if (seenTracks.has(t.url)) continue;
+		seenTracks.add(t.url);
 		const owner =
 			(t.artist.mbid && artistByMbid.get(t.artist.mbid)) || artistByName.get(normaliseName(t.artist.name));
 		const country = owner && countryOfArtist.get(owner);

@@ -13,9 +13,11 @@
 	// Server data first, then live updates from the stamping loop.
 	let passport = $derived(data.passport);
 	let status = $state<StampStatus | null>(null);
+	let empty = $derived(passport.stamps.length === 0 && passport.pendingArtists === 0);
 
 	onMount(() => {
-		if (passport.pendingArtists === 0) return;
+		// `remaining` includes next-destination candidates, which pendingArtists doesn't count.
+		if (data.remaining === 0) return;
 		const poller = startPolling({
 			username: passport.username,
 			fetch,
@@ -23,6 +25,10 @@
 			onUpdate: (next, nextStatus) => {
 				passport = next;
 				status = nextStatus;
+			},
+			onError: (terminal) => {
+				// A terminal error leaves the passport as it is; otherwise show that we're retrying.
+				status = terminal ? null : 'unavailable';
 			}
 		});
 		return poller.stop;
@@ -43,14 +49,24 @@
 <IdStrip {passport} />
 <StampingStatus {passport} {status} />
 <WorldMap stamps={passport.stamps} />
-<Stamps stamps={passport.stamps} />
-<NextDestination destinations={passport.destinations} />
+{#if empty}
+	<p class="empty">
+		No scrobbles to stamp yet. Listen to some music with last.fm scrobbling on, then come back.
+	</p>
+{:else}
+	<Stamps stamps={passport.stamps} />
+	<NextDestination destinations={passport.destinations} />
+{/if}
 
 <form method="POST" action="/api/{encodeURIComponent(passport.username)}/refresh" class="refresh">
 	<button>Refresh from last.fm</button>
 </form>
 
 <style>
+	.empty {
+		margin-block: 2rem;
+		color: var(--muted);
+	}
 	.refresh {
 		margin-block: 2rem;
 	}

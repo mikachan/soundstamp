@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest';
 import { isHttpError, isRedirect } from '@sveltejs/kit';
 import { load } from '../../src/routes/[username]/+page.server';
 import { actions } from '../../src/routes/+page.server';
-import { LastfmUnavailable } from '#lib/server/lastfm/client';
+import { LastfmPrivateProfile, LastfmUnavailable } from '#lib/server/lastfm/client';
 import { artist } from '../lib/passport/fixtures';
 import { fakeDeps, fakeLastfm, fakeMusicBrainz } from '../lib/server/fakes';
 import type { StampingDeps } from '#lib/server/stamping';
@@ -32,6 +32,18 @@ describe('/[username] load', () => {
 		expect(data.passport.pendingArtists).toBe(1);
 	});
 
+	test('reports remaining work including destination candidates', async () => {
+		const d = deps({
+			name: 'rj',
+			artists: [artist('Boris', 10, 'bo')],
+			similar: { Boris: [{ name: 'Ghost', mbid: 'gh', match: 0.5, url: 'u' }] }
+		});
+		await d.artists.set('mbid:bo', { country: 'JP', resolvedAt: 0 });
+		const data = await load(event('rj', d));
+		expect(data.passport.pendingArtists).toBe(0);
+		expect(data.remaining).toBe(1);
+	});
+
 	test('redirects to the canonical username', async () => {
 		const d = deps({ name: 'rj' });
 		const e = await caught(() => load(event('RJ', d)));
@@ -47,6 +59,17 @@ describe('/[username] load', () => {
 	test('unknown users get a friendly 404', async () => {
 		const e = await caught(() => load(event('nobody', deps({ missing: true }))));
 		expect(isHttpError(e, 404) && e.body.message).toBe('No last.fm user called "nobody"');
+	});
+
+	test('private profiles get a friendly 403', async () => {
+		const d = deps({ name: 'shy' });
+		d.lastfm.getTopArtists = async () => {
+			throw new LastfmPrivateProfile('private');
+		};
+		const e = await caught(() => load(event('shy', d)));
+		expect(isHttpError(e, 403) && e.body.message).toBe(
+			"shy's last.fm listening history is private, so there's nothing to stamp"
+		);
 	});
 
 	test('last.fm outages get a 503', async () => {

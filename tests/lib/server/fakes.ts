@@ -38,17 +38,23 @@ export function fakeLastfm(opts: {
 	};
 }
 
-/** MusicBrainz stub: name → country, or name → Error to throw. Each call advances the clock. */
-export function fakeMusicBrainz(answers: Record<string, string | null | Error>, clock: { t: number }, stepMs = 1000) {
+type Answer = string | null | Error | (() => Promise<string | null>);
+
+/** MusicBrainz stub: name → country, Error to throw, or a hook. Each call advances the clock. */
+export function fakeMusicBrainz(answers: Record<string, Answer>, clock: { t: number }, stepMs = 1000) {
 	const asked: string[] = [];
+	const deadlines: (number | undefined)[] = [];
 	return {
 		asked,
+		deadlines,
 		client: {
-			async resolveArtistCountry(artist: { name: string; mbid?: string }) {
+			async resolveArtistCountry(artist: { name: string; mbid?: string }, opts: { deadline?: number } = {}) {
 				asked.push(artist.name);
+				deadlines.push(opts.deadline);
 				clock.t += stepMs;
 				const answer = answers[artist.name];
 				if (answer instanceof Error) throw answer;
+				if (typeof answer === 'function') return answer();
 				return answer ?? null;
 			}
 		}
@@ -59,12 +65,13 @@ export function fakeDeps(
 	lastfm: ReturnType<typeof fakeLastfm>['client'],
 	mb: ReturnType<typeof fakeMusicBrainz>['client'],
 	clock: { t: number }
-): StampingDeps & { artists: ReturnType<typeof memoryKV<ArtistRecord>>; snapshots: ReturnType<typeof memoryKV<Snapshot>> } {
+): StampingDeps {
 	return {
 		lastfm: lastfm as StampingDeps['lastfm'],
 		mb: mb as StampingDeps['mb'],
 		artists: memoryKV<ArtistRecord>(),
 		snapshots: memoryKV<Snapshot>(),
+		records: memoryKV<Record<string, ArtistRecord>>(),
 		now: () => clock.t
 	};
 }

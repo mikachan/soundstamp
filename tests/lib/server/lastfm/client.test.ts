@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import {
 	createLastfmClient,
+	LastfmPrivateProfile,
 	LastfmUnavailable,
 	LastfmUserNotFound
 } from '#lib/server/lastfm/client';
@@ -134,4 +135,9 @@ describe('errors', () => {
 		const lastfm = createLastfmClient({ apiKey: 'KEY', fetch });
 		await expect(lastfm.getUser('rj')).rejects.toBeInstanceOf(LastfmUnavailable);
 	});
+});
+
+test('error 17 (private profile) throws LastfmPrivateProfile', async () => {
+	const { lastfm } = client({ error: 17, message: 'Login: User required to be logged in' }, 403);
+	await expect(lastfm.getTopArtists('shy', 500)).rejects.toBeInstanceOf(LastfmPrivateProfile);
 });

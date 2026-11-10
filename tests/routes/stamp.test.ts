@@ -35,5 +35,5 @@ test('refresh refetches last.fm, keeps artist records, and redirects to the cano
 	expect(isRedirect(thrown) && thrown.status === 303 && thrown.location === '/RJ').toBe(true);
 	expect(lastfm.calls.filter((c) => c.method === 'getUser')).toHaveLength(1);
 	expect(await d.artists.get('mbid:bo')).toEqual(known('JP'));
-	expect((await d.snapshots.get('rj'))?.records['mbid:bo']).toEqual(known('JP'));
+	expect((await d.records.get('rj'))?.['mbid:bo']).toEqual(known('JP'));
 });

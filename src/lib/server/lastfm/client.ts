@@ -5,8 +5,11 @@ export type { LastfmArtist, LastfmTrack, LastfmUser, SimilarArtist } from './typ
 
 const API_ROOT = 'https://ws.audioscrobbler.com/2.0/';
 const USER_NOT_FOUND = 6;
+const LOGIN_REQUIRED = 17;
 
 export class LastfmUserNotFound extends Error {}
+/** The user hides their listening history. */
+export class LastfmPrivateProfile extends Error {}
 export class LastfmUnavailable extends Error {}
 
 const optionalMbid = (mbid: unknown) => (typeof mbid === 'string' && mbid !== '' ? mbid : undefined);
@@ -35,6 +38,7 @@ export function createLastfmClient(opts: { apiKey: string; fetch: typeof fetch }
 		}
 
 		if (body?.error === USER_NOT_FOUND) throw new LastfmUserNotFound(body.message ?? 'User not found');
+		if (body?.error === LOGIN_REQUIRED) throw new LastfmPrivateProfile(body.message ?? 'Private profile');
 		if (!response.ok || body?.error) {
 			throw new LastfmUnavailable(`last.fm ${method} failed: ${body?.message ?? response.status}`);
 		}

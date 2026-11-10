@@ -12,6 +12,8 @@ export function startPolling(opts: {
 	username: string;
 	fetch: typeof fetch;
 	onUpdate: (passport: Passport, status: StampStatus) => void;
+	/** A request failed; `terminal` means polling has stopped (4xx, e.g. the user no longer exists). */
+	onError?: (terminal: boolean) => void;
 	sleep: (ms: number) => Promise<void>;
 }): { stop(): void; done: Promise<void> } {
 	let stopped = false;
@@ -25,9 +27,15 @@ export function startPolling(opts: {
 				const response = await opts.fetch(`/api/${encodeURIComponent(opts.username)}/stamp`, {
 					method: 'POST'
 				});
+				if (response.status >= 400 && response.status < 500) {
+					opts.onError?.(true);
+					return;
+				}
 				if (!response.ok) throw new Error(`stamp failed: ${response.status}`);
 				result = await response.json();
 			} catch {
+				if (stopped) return;
+				opts.onError?.(false);
 				await opts.sleep(nextBackoff());
 				continue;
 			}
