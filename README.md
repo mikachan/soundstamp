@@ -22,10 +22,6 @@ npm test          # unit and component tests
 npm run check     # type check
 ```
 
-If `netlify dev` shows "Could not proxy request" or pages load without working scripts, a leftover production build is being served. Delete it with `rm -rf build .netlify/v1 .netlify/functions-internal` and restart.
-
-Each production deploy on Netlify's free plan costs 15 of its 300 credits, so do most work locally and deploy in batches.
-
 ## Licence
 
 Soundstamp is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 2 of the License, or (at your option) any later version. See [`LICENSE`](LICENSE).
