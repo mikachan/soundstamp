@@ -2,6 +2,9 @@
 	import { onMount } from 'svelte';
 	import IdStrip from '#lib/components/IdStrip.svelte';
 	import StampingStatus from '#lib/components/StampingStatus.svelte';
+	import WorldMap from '#lib/components/WorldMap.svelte';
+	import Stamps from '#lib/components/Stamps.svelte';
+	import NextDestination from '#lib/components/NextDestination.svelte';
 	import { startPolling, type StampStatus } from '#lib/client/poll.js';
 	import type { PageProps } from './$types';
 
@@ -39,6 +42,9 @@
 
 <IdStrip {passport} />
 <StampingStatus {passport} {status} />
+<WorldMap stamps={passport.stamps} />
+<Stamps stamps={passport.stamps} />
+<NextDestination destinations={passport.destinations} />
 
 <form method="POST" action="/api/{encodeURIComponent(passport.username)}/refresh" class="refresh">
 	<button>Refresh from last.fm</button>
