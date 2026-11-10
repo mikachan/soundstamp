@@ -30,6 +30,7 @@ export function snapshot(overrides: Partial<Snapshot> = {}): Snapshot {
 		artists: [],
 		tracks: [],
 		similar: [],
+		heard: [],
 		...overrides
 	};
 }

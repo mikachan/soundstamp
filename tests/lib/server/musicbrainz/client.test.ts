@@ -113,6 +113,15 @@ describe('name search', () => {
 		expect(requests).toHaveLength(1);
 	});
 
+	test('name search refuses a match when a lower-scored artist has the same name', async () => {
+		const { mb } = setup({
+			[search('Hide')]: {
+				body: { artists: [{ name: 'hide', score: 100, country: 'JP' }, { name: 'HIDE', score: 89 }] }
+			}
+		});
+		expect(await mb.resolveArtistCountry({ name: 'Hide' })).toBeNull();
+	});
+
 	test('rejects a top result below score 100', async () => {
 		const { mb } = setup({
 			[search('Boris')]: { body: { artists: [{ name: 'Boris', score: 98, country: 'JP' }] } }
@@ -274,5 +283,44 @@ describe('area cache', () => {
 		expect(await mb.resolveArtistCountry({ name: 'Two', mbid: '2' })).toBe('GB');
 		expect(requests.filter((p) => p.startsWith('/ws/2/area/'))).toHaveLength(1);
 		expect(await areas.get('london')).toEqual({ country: 'GB' });
+	});
+});
+
+describe('isNameShared', () => {
+	test('true when MusicBrainz has several artists with exactly this name', async () => {
+		const { mb } = setup({
+			[search('Hyde')]: {
+				body: {
+					artists: [
+						{ name: 'HYDE', score: 100, country: 'JP' },
+						{ name: 'Hyde', score: 100, country: 'BR' },
+						{ name: 'Hyde Park', score: 70 }
+					]
+				}
+			}
+		});
+		expect(await mb.isNameShared('Hyde')).toBe(true);
+	});
+
+	test('counts same-name artists even when their search score is lower', async () => {
+		const { mb } = setup({
+			[search('Hide')]: {
+				body: {
+					artists: [
+						{ name: 'hide', score: 100, country: 'JP' },
+						{ name: 'HIDE', score: 89 },
+						{ name: 'HIDE×HIDE', score: 87 }
+					]
+				}
+			}
+		});
+		expect(await mb.isNameShared('Hide')).toBe(true);
+	});
+
+	test('false when only one artist has the name', async () => {
+		const { mb } = setup({
+			[search('Múm')]: { body: { artists: [{ name: 'múm', score: 100 }, { name: 'Mumm-Ra', score: 60 }] } }
+		});
+		expect(await mb.isNameShared('Múm')).toBe(false);
 	});
 });

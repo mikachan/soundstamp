@@ -9,6 +9,7 @@ export function fakeLastfm(opts: {
 	artists?: LastfmArtist[];
 	tracks?: LastfmTrack[];
 	similar?: Record<string, SimilarArtist[]>;
+	heard?: string[];
 	missing?: boolean;
 }) {
 	const calls: { method: string; args: unknown[] }[] = [];
@@ -30,6 +31,10 @@ export function fakeLastfm(opts: {
 				log('getTopTracks', username, limit, period);
 				return opts.tracks ?? [];
 			},
+			async getHeardArtistNames(username: string, maxPages: number) {
+				log('getHeardArtistNames', username, maxPages);
+				return opts.heard ?? (opts.artists ?? []).map((a) => a.name);
+			},
 			async getSimilar(artist: { name: string; mbid?: string }, limit: number) {
 				log('getSimilar', artist.name, limit);
 				return opts.similar?.[artist.name] ?? [];
@@ -45,16 +50,24 @@ export function fakeMusicBrainz(
 	answers: Record<string, Answer>,
 	clock: { t: number },
 	stepMs = 1000,
-	bulk: Record<string, string | null> | Error = {}
+	bulk: Record<string, string | null> | Error = {},
+	sharedNames: string[] = []
 ) {
 	const asked: string[] = [];
 	const deadlines: (number | undefined)[] = [];
 	const bulkCalls: string[][] = [];
+	const nameChecks: string[] = [];
 	return {
 		asked,
 		deadlines,
 		bulkCalls,
+		nameChecks,
 		client: {
+			async isNameShared(name: string, _opts: { deadline?: number } = {}) {
+				nameChecks.push(name);
+				clock.t += stepMs;
+				return sharedNames.includes(name);
+			},
 			async resolveMany(artists: { name: string; mbid?: string }[], _opts: { deadline?: number } = {}) {
 				bulkCalls.push(artists.map((a) => a.mbid!));
 				clock.t += stepMs;

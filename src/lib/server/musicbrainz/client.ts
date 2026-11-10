@@ -132,6 +132,18 @@ export function createMusicBrainzClient(opts: {
 			return answers;
 		},
 
+		/** Whether MusicBrainz has more than one artist with exactly this name (so an MBID from last.fm may be the wrong one). */
+		async isNameShared(name: string, opts: { deadline?: number } = {}): Promise<boolean> {
+			const results = await get(
+				'/artist',
+				{ query: `artist:"${escapeLucene(name)}"`, limit: '5' },
+				opts.deadline ?? Infinity
+			);
+			// Compare names regardless of score: "HIDE" scores lower than "hide" but is a different artist.
+			const sameNamed = (results?.artists ?? []).filter((a: { name: string }) => sameName(a.name, name));
+			return sameNamed.length > 1;
+		},
+
 		async resolveArtistCountry(
 			artist: { name: string; mbid?: string },
 			opts: { deadline?: number } = {}
@@ -147,12 +159,13 @@ export function createMusicBrainzClient(opts: {
 				{ query: `artist:"${escapeLucene(artist.name)}"`, limit: '5' },
 				deadline
 			);
-			const exact = (results?.artists ?? []).filter(
-				(a: { name: string; score: number }) => a.score === 100 && sameName(a.name, artist.name)
+			const sameNamed = (results?.artists ?? []).filter((a: { name: string }) =>
+				sameName(a.name, artist.name)
 			);
-			// Several artists share this name (e.g. Nirvana US and UK): don't guess.
-			if (exact.length !== 1 || results.artists[0] !== exact[0]) return null;
-			return countryFromArtist(exact[0], deadline);
+			const top = results?.artists?.[0];
+			// Several artists share this name (e.g. Nirvana US and UK, or "hide" and "HIDE"): don't guess.
+			if (sameNamed.length !== 1 || top !== sameNamed[0] || top.score !== 100) return null;
+			return countryFromArtist(top, deadline);
 		}
 	};
 }

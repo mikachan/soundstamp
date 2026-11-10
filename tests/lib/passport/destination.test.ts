@@ -4,6 +4,8 @@ import type { SimilarArtist } from '#lib/server/lastfm/types';
 import type { ArtistRecord } from '#lib/server/store/types';
 import { artist, known, snapshot } from './fixtures';
 
+const checked = (country: string | null): ArtistRecord => ({ ...known(country), sharedName: false });
+
 const similar = (name: string, match: number, mbid?: string): SimilarArtist => ({
 	name,
 	mbid,
@@ -31,12 +33,12 @@ function setup() {
 	const records = new Map<string, ArtistRecord>([
 		['mbid:sr', known('IS')],
 		['mbid:bo', known('JP')],
-		['mbid:mum', known('IS')],
-		['mbid:ma', known('EE')],
-		['mbid:ke', known('EE')],
-		['mbid:ww', known('XW')],
-		['name:unknown act', known(null)],
-		['mbid:gh', known('SE')]
+		['mbid:mum', checked('IS')],
+		['mbid:ma', checked('EE')],
+		['mbid:ke', checked('EE')],
+		['mbid:ww', checked('XW')],
+		['name:unknown act', checked(null)],
+		['mbid:gh', checked('SE')]
 	]);
 	return { s, records, visited: new Set(['IS', 'JP']) };
 }
@@ -77,4 +79,17 @@ test('candidates without a record yet are skipped', () => {
 test('returns [] when nothing qualifies', () => {
 	const { s, records } = setup();
 	expect(rankDestinations(s, records, new Set(['IS', 'JP', 'EE', 'SE']))).toEqual([]);
+});
+
+test('skips candidates whose name is shared by several MusicBrainz artists, or not yet checked', () => {
+	const { s, records, visited } = setup();
+	records.set('mbid:ke', { ...known('EE'), sharedName: true });
+	records.set('mbid:ma', known('EE'));
+	expect(rankDestinations(s, records, visited).map((d) => d.country)).toEqual(['SE']);
+});
+
+test("skips artists anywhere in the user's listening history", () => {
+	const { s, records, visited } = setup();
+	s.heard = ['kerli', 'mart avi'];
+	expect(rankDestinations(s, records, visited).map((d) => d.country)).toEqual(['SE']);
 });

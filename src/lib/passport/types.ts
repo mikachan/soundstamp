@@ -16,6 +16,8 @@ export interface Snapshot {
 	tracks: LastfmTrack[];
 	/** Similar artists for each of the user's top artists; `seed` is the seed artist's name. */
 	similar: { seed: string; artists: SimilarArtist[] }[];
+	/** Normalised names of every artist the user has listened to (all time, capped). */
+	heard: string[];
 }
 
 export interface Stamp {

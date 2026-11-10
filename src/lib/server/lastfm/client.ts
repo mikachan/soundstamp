@@ -70,6 +70,25 @@ export function createLastfmClient(opts: { apiKey: string; fetch: typeof fetch }
 			}));
 		},
 
+		/** Names of every artist the user has scrobbled, all time, up to `maxPages` pages of 1000. */
+		async getHeardArtistNames(username: string, maxPages: number): Promise<string[]> {
+			const page = (n: number) =>
+				call('user.gettopartists', {
+					user: username,
+					period: 'overall',
+					limit: '1000',
+					page: String(n)
+				});
+			const first = await page(1);
+			const totalPages = Math.min(Number(first.topartists?.['@attr']?.totalPages ?? 1), maxPages);
+			const rest = await Promise.all(
+				Array.from({ length: Math.max(0, totalPages - 1) }, (_, i) => page(i + 2))
+			);
+			return [first, ...rest].flatMap((body) =>
+				asArray<any>(body.topartists?.artist).map((a) => a.name as string)
+			);
+		},
+
 		async getTopTracks(username: string, limit: number, period = 'overall'): Promise<LastfmTrack[]> {
 			const body = await call('user.gettoptracks', {
 				user: username,

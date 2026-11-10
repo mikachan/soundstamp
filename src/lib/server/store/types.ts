@@ -9,6 +9,11 @@ export interface KV<T> {
 export interface ArtistRecord {
 	country: string | null;
 	resolvedAt: number;
+	/**
+	 * Whether MusicBrainz has several artists with this name. Only checked for
+	 * next-destination candidates; undefined means not checked yet.
+	 */
+	sharedName?: boolean;
 }
 
 export function memoryKV<T>(): KV<T> {

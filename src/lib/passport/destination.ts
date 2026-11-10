@@ -10,14 +10,17 @@ export function rankDestinations(
 	visited: Set<string>
 ): Destination[] {
 	const ownKeys = new Set(s.artists.map(artistKey));
-	const ownNames = new Set(s.artists.map((a) => normaliseName(a.name)));
+	const ownNames = new Set([...s.artists.map((a) => normaliseName(a.name)), ...s.heard]);
 	const best = new Map<string, Destination>();
 
 	for (const { seed, artists } of s.similar) {
 		for (const candidate of artists) {
 			if (ownKeys.has(artistKey(candidate)) || ownNames.has(normaliseName(candidate.name))) continue;
-			const country = records.get(artistKey(candidate))?.country;
+			const record = records.get(artistKey(candidate));
+			const country = record?.country;
 			if (!isRealCountry(country) || visited.has(country)) continue;
+			// last.fm merges same-name artists, so its MBID may point at the wrong one.
+			if (record?.sharedName !== false) continue;
 			const current = best.get(country);
 			if (current && current.match >= candidate.match) continue;
 			best.set(country, {

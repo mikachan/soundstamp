@@ -86,10 +86,10 @@ describe('pendingQueue', () => {
 		expect(pendingQueue(s, records).map((q) => q.name)).toEqual(['B', 'C']);
 	});
 
-	test('caps destination candidates at 50', () => {
-		const candidates = Array.from({ length: 60 }, (_, i) => sim(`S${i}`, 1 - i / 100));
+	test('caps destination candidates at 200', () => {
+		const candidates = Array.from({ length: 250 }, (_, i) => sim(`S${i}`, 1 - i / 1000));
 		const s = snapshot({ artists: [], similar: [{ seed: 'A', artists: candidates }] });
-		expect(pendingQueue(s, new Map())).toHaveLength(50);
+		expect(pendingQueue(s, new Map())).toHaveLength(200);
 	});
 });
 
@@ -293,4 +293,57 @@ describe('periods', () => {
 		expect(result.passport.stamps.map((st) => st.country)).toEqual(['IS']);
 		expect(await deps.snapshots.get('rj:1month')).not.toBeNull();
 	});
+});
+
+describe('next destination checks', () => {
+	test('stores the full listening history as normalised names', async () => {
+		const lastfm = fakeLastfm({ name: 'RJ', artists: [artist('A', 1)], heard: ['A', ' Hyde  '] });
+		const clock = { t: 0 };
+		const deps = fakeDeps(lastfm.client, fakeMusicBrainz({}, clock).client, clock);
+		const s = await getSnapshot(deps, 'rj');
+		expect(s.heard).toEqual(['a', 'hyde']);
+		expect(lastfm.calls.find((c) => c.method === 'getHeardArtistNames')?.args).toEqual(['RJ', 5]);
+	});
+
+	test('checks name sharing for the top candidates and records it in the shared cache', async () => {
+		const clock = { t: 0 };
+		const lastfm = fakeLastfm({
+			artists: [artist('Seed', 10, 'seed')],
+			similar: {
+				Seed: [
+					{ name: 'Hyde', mbid: 'hy', match: 0.9, url: 'u/hyde' },
+					{ name: 'Kerli', mbid: 'ke', match: 0.8, url: 'u/kerli' }
+				]
+			}
+		});
+		const mb = fakeMusicBrainz({}, clock, 1000, { seed: 'JP', hy: 'BR', ke: 'EE' }, ['Hyde']);
+		const deps = fakeDeps(lastfm.client, mb.client, clock);
+
+		const result = await stampNextBatch(deps, 'rj', 8000);
+
+		expect(mb.nameChecks).toEqual(['Hyde', 'Kerli']);
+		expect((await deps.artists.get('mbid:hy'))?.sharedName).toBe(true);
+		expect((await deps.artists.get('mbid:ke'))?.sharedName).toBe(false);
+		expect(result.passport.destinations.map((d) => d.artist.name)).toEqual(['Kerli']);
+		expect(result.remaining).toBe(0);
+	});
+});
+
+test('snapshots saved before listening history was stored are refetched', async () => {
+	const lastfm = fakeLastfm({ name: 'RJ', heard: ['A'] });
+	const clock = { t: 1000 };
+	const deps = fakeDeps(lastfm.client, fakeMusicBrainz({}, clock).client, clock);
+	const legacy = snapshot({ username: 'RJ', createdAt: 900 }) as Partial<ReturnType<typeof snapshot>>;
+	delete legacy.heard;
+	await deps.snapshots.set('rj:12month', legacy as ReturnType<typeof snapshot>);
+	expect((await getSnapshot(deps, 'rj')).heard).toEqual(['a']);
+});
+
+test('destination candidates the user has already heard are never looked up', () => {
+	const s = snapshot({
+		artists: [artist('A', 10)],
+		similar: [{ seed: 'A', artists: [sim('Heard Before', 0.99), sim('New One', 0.5)] }],
+		heard: ['heard before']
+	});
+	expect(pendingQueue(s, new Map([['name:a', known('IS')]])).map((q) => q.name)).toEqual(['New One']);
 });

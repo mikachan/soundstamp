@@ -1,7 +1,8 @@
 import { assemblePassport, READY_COVERAGE } from '../passport/assemble';
 import { DEFAULT_PERIOD, type Period } from '../passport/periods';
 import type { Passport, Snapshot } from '../passport/types';
-import { artistKey } from './artist-key';
+import { isRealCountry } from '../geo/countries';
+import { artistKey, normaliseName } from './artist-key';
 import type { createLastfmClient } from './lastfm/client';
 import type { createMusicBrainzClient } from './musicbrainz/client';
 import { BULK_LIMIT, DeadlineReached, MusicBrainzUnavailable } from './musicbrainz/client';
@@ -12,12 +13,15 @@ export const SNAPSHOT_TTL_MS = 24 * 3600 * 1000;
 const TOP_ARTISTS = 500;
 const TOP_TRACKS = 500;
 const SIMILAR_SEEDS = 10;
-const SIMILAR_PER_SEED = 20;
-const MAX_CANDIDATES = 50;
+const SIMILAR_PER_SEED = 50;
+// Cheap now that lookups are batched (100 per request); heavy listeners need many to find somewhere new.
+const MAX_CANDIDATES = 200;
 // Every MusicBrainz request also checks this deadline, so a batch ends within ~15 s:
 // well inside Netlify's 60 s synchronous limit, and short enough for frequent progress updates.
 const DEFAULT_BUDGET_MS = 12_000;
 const READ_CONCURRENCY = 50;
+const HEARD_PAGES = 5;
+const NAME_CHECKS_PER_BATCH = 3;
 
 export interface StampingDeps {
 	lastfm: ReturnType<typeof createLastfmClient>;
@@ -45,11 +49,13 @@ const storeKey = (username: string, period: Period) => `${username.toLowerCase()
 
 function candidates(s: Snapshot): QueueItem[] {
 	const own = new Set(s.artists.map(artistKey));
+	const heard = new Set(s.heard ?? []);
 	const best = new Map<string, { item: QueueItem; match: number }>();
 	for (const { artists } of s.similar) {
 		for (const c of artists) {
 			const key = artistKey(c);
-			if (own.has(key) || (best.get(key)?.match ?? -1) >= c.match) continue;
+			if (own.has(key) || heard.has(normaliseName(c.name))) continue;
+			if ((best.get(key)?.match ?? -1) >= c.match) continue;
 			best.set(key, { item: { name: c.name, mbid: c.mbid }, match: c.match });
 		}
 	}
@@ -73,7 +79,9 @@ export async function getSnapshot(
 ): Promise<Snapshot> {
 	const period = opts.period ?? DEFAULT_PERIOD;
 	const existing = await deps.snapshots.get(storeKey(username, period));
-	if (existing && !opts.refresh && deps.now() - existing.createdAt < SNAPSHOT_TTL_MS) return existing;
+	// Snapshots from before `heard` existed are treated as stale.
+	const fresh = existing?.heard && deps.now() - existing.createdAt < SNAPSHOT_TTL_MS;
+	if (existing && fresh && !opts.refresh) return existing;
 
 	const user = await deps.lastfm.getUser(username);
 	const [artists, tracks] = await Promise.all([
@@ -87,6 +95,11 @@ export async function getSnapshot(
 			artists: await deps.lastfm.getSimilar(seed, SIMILAR_PER_SEED).catch(() => [])
 		}))
 	);
+	// Everyone the user has ever listened to, so next destination never suggests them.
+	const heard = await deps.lastfm
+		.getHeardArtistNames(user.name, HEARD_PAGES)
+		.catch(() => artists.map((a) => a.name));
+
 	const snapshot: Snapshot = {
 		username: user.name,
 		period,
@@ -94,7 +107,8 @@ export async function getSnapshot(
 		user,
 		artists,
 		tracks,
-		similar
+		similar,
+		heard: [...new Set(heard.map(normaliseName))]
 	};
 
 	// Pick up countries already resolved for other users.
@@ -150,6 +164,38 @@ export function pendingQueue(s: Snapshot, records: Map<string, ArtistRecord>): Q
 	return [...first, ...middle, ...rest];
 }
 
+/**
+ * Destination candidates whose name still needs checking for duplicates, best match
+ * first, stopping at the first one already known to be safe to suggest.
+ */
+export function nameCheckQueue(s: Snapshot, records: Map<string, ArtistRecord>): QueueItem[] {
+	const ownKeys = new Set(s.artists.map(artistKey));
+	const skipNames = new Set([...s.artists.map((a) => normaliseName(a.name)), ...s.heard]);
+	const visited = new Set(
+		s.artists.map((a) => records.get(artistKey(a))?.country).filter((c) => isRealCountry(c))
+	);
+	const ranked = s.similar
+		.flatMap((x) => x.artists)
+		.filter((c) => !ownKeys.has(artistKey(c)) && !skipNames.has(normaliseName(c.name)))
+		.sort((a, b) => b.match - a.match);
+
+	const queue: QueueItem[] = [];
+	const seen = new Set<string>();
+	for (const c of ranked) {
+		const key = artistKey(c);
+		if (seen.has(key)) continue;
+		seen.add(key);
+		const record = records.get(key);
+		if (!record || !isRealCountry(record.country) || visited.has(record.country)) continue;
+		if (record.sharedName === false) break;
+		if (record.sharedName === undefined) queue.push({ name: c.name, mbid: c.mbid });
+	}
+	return queue;
+}
+
+const remainingWork = (s: Snapshot, records: Map<string, ArtistRecord>) =>
+	pendingQueue(s, records).length + nameCheckQueue(s, records).length;
+
 /** How a failed lookup affects the batch: stop with a status, or (null) mark the artist unknown and continue. */
 function stopStatus(error: unknown): BatchResult['status'] | 'stop' | null {
 	if (error instanceof DeadlineReached) return 'stop';
@@ -177,7 +223,7 @@ export async function stampNextBatch(
 	};
 	const finish = async (): Promise<BatchResult> => {
 		await mergeRecords(deps, s, fresh);
-		return { status, passport: assemblePassport(s, records), remaining: pendingQueue(s, records).length };
+		return { status, passport: assemblePassport(s, records), remaining: remainingWork(s, records) };
 	};
 
 	const queue = pendingQueue(s, records);
@@ -235,11 +281,31 @@ export async function stampNextBatch(
 		}
 	}
 
+	// Check the best destination candidates' names, so a wrong last.fm MBID can't suggest the wrong artist.
+	if (status === 'ok') {
+		for (const item of nameCheckQueue(s, records).slice(0, NAME_CHECKS_PER_BATCH)) {
+			if (deps.now() >= deadline) break;
+			const key = artistKey(item);
+			let sharedName: boolean;
+			try {
+				sharedName = await deps.mb.isNameShared(item.name, { deadline });
+			} catch (error) {
+				const stop = stopStatus(error);
+				if (stop === null) throw error;
+				if (stop !== 'stop') status = stop;
+				break;
+			}
+			const record = { ...records.get(key)!, sharedName };
+			await deps.artists.set(key, record);
+			keep(key, record);
+		}
+	}
+
 	return finish();
 }
 
 /** The passport as it stands, plus how many lookups are still queued (including destination candidates). */
 export async function currentPassport(deps: StampingDeps, s: Snapshot) {
 	const records = await loadRecords(deps, s);
-	return { passport: assemblePassport(s, records), remaining: pendingQueue(s, records).length };
+	return { passport: assemblePassport(s, records), remaining: remainingWork(s, records) };
 }

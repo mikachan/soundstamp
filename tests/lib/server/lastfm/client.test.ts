@@ -150,3 +150,25 @@ test('error 17 (private profile) throws LastfmPrivateProfile', async () => {
 	const { lastfm } = client({ error: 17, message: 'Login: User required to be logged in' }, 403);
 	await expect(lastfm.getTopArtists('shy', 500)).rejects.toBeInstanceOf(LastfmPrivateProfile);
 });
+
+test('getHeardArtistNames pages through all-time artists, up to a page cap', async () => {
+	const pages: Record<string, unknown> = {
+		'1': { topartists: { artist: [{ name: 'A', playcount: '9', url: 'u' }], '@attr': { totalPages: '3' } } },
+		'2': { topartists: { artist: [{ name: 'B', playcount: '5', url: 'u' }], '@attr': { totalPages: '3' } } },
+		'3': { topartists: { artist: [{ name: 'C', playcount: '1', url: 'u' }], '@attr': { totalPages: '3' } } }
+	};
+	const calls: URL[] = [];
+	const fetch = (async (input: string | URL) => {
+		const url = new URL(input.toString());
+		calls.push(url);
+		return Response.json(pages[url.searchParams.get('page')!]);
+	}) as typeof globalThis.fetch;
+	const lastfm = createLastfmClient({ apiKey: 'KEY', fetch });
+
+	expect(await lastfm.getHeardArtistNames('rj', 2)).toEqual(['A', 'B']);
+	expect(calls.map((u) => [u.searchParams.get('period'), u.searchParams.get('limit')])).toEqual([
+		['overall', '1000'],
+		['overall', '1000']
+	]);
+	expect(await lastfm.getHeardArtistNames('rj', 5)).toEqual(['A', 'B', 'C']);
+});
