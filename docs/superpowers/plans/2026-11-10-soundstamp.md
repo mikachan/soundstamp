@@ -100,7 +100,7 @@ tests/…                              # mirrors src paths; fixtures in tests/fi
 **Interfaces:**
 - Produces: `npm test` (vitest run), `npm run build`, `npm run check`
 
-- [ ] **Step 1:** Run `git init` in `/Users/sarahnorris/Source/Personal/musical-passport`. Scaffold SvelteKit into the existing folder, keeping `docs/`. Set the `package.json` name to `soundstamp`.
+- [ ] **Step 1:** The repo already exists, on the `main` branch with `origin` set to `github.com/mikachan/soundstamp` and a `.gitignore`. Scaffold SvelteKit into the existing folder, keeping `docs/` and merging into the existing `.gitignore`. Set the `package.json` name to `soundstamp`.
 - [ ] **Step 2:** Install the dev and runtime dependencies listed under Tech Stack. Configure `adapter({ edge: false, split: false })`. In `netlify.toml`, set `[build] command = "npm run build"` and `publish = "build"`.
 - [ ] **Step 3:** `.gitignore` must include `.superpowers/`, `.env`, `.env.*` (except `.env.example`), `.netlify/`, `node_modules/` and `build/`. `.env.example` contains `LASTFM_API_KEY=` and `MB_CONTACT=`.
 - [ ] **Step 4:** Configure Vitest with the `jsdom` environment for `*.svelte.test.ts` and `node` for the rest. Write `tests/smoke.test.ts` with `expect(1 + 1).toBe(2)`.
