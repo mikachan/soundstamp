@@ -13,6 +13,8 @@ export const load: PageServerLoad = async ({ params, url, locals }) => {
 	if (snapshot.username !== params.username) {
 		redirect(301, `/${encodeURIComponent(snapshot.username)}${periodQuery(period)}`);
 	}
-	const ogImage = `${url.origin}/${encodeURIComponent(snapshot.username)}/og.png${periodQuery(period)}`;
-	return { ...(await currentPassport(deps, snapshot)), period, ogImage };
+	const passportPath = `${url.origin}/${encodeURIComponent(snapshot.username)}`;
+	const ogImage = `${passportPath}/og.png${periodQuery(period)}`;
+	const shareUrl = `${passportPath}${periodQuery(period)}`;
+	return { ...(await currentPassport(deps, snapshot)), period, ogImage, shareUrl };
 };

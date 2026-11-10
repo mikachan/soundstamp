@@ -41,6 +41,7 @@ test('homepage card is a cached PNG', async () => {
 test('passport pages point link previews at their card, keeping the period', async () => {
 	const data = await load(event('/rj?period=overall', { username: 'rj' }, deps({ name: 'rj' })));
 	expect(data.ogImage).toBe('https://soundstamp.sekai.co.uk/rj/og.png?period=overall');
+	expect(data.shareUrl).toBe('https://soundstamp.sekai.co.uk/rj?period=overall');
 });
 
 test('the homepage points link previews at the general card', async () => {

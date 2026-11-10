@@ -5,6 +5,7 @@
 	import WorldMap from '#lib/components/WorldMap.svelte';
 	import Stamps from '#lib/components/Stamps.svelte';
 	import NextDestination from '#lib/components/NextDestination.svelte';
+	import SharePassport from '#lib/components/SharePassport.svelte';
 	import { startPolling, type StampStatus } from '#lib/client/poll.js';
 	import { PERIODS, periodLabel, periodQuery } from '#lib/passport/periods.js';
 	import type { PageProps } from './$types';
@@ -73,6 +74,7 @@
 {:else}
 	<Stamps stamps={passport.stamps} />
 	<NextDestination destinations={passport.destinations} />
+	<SharePassport username={passport.username} url={data.shareUrl} image={data.ogImage} />
 {/if}
 
 <form method="POST" action="/api/{encodeURIComponent(passport.username)}/refresh{periodQuery(data.period)}" class="refresh">
