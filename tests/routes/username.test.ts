@@ -66,10 +66,13 @@ describe('/[username] load', () => {
 		expect(isRedirect(e) && e.status === 301 && e.location === '/rj').toBe(true);
 	});
 
-	test('canonical names with spaces resolve without redirecting', async () => {
-		const d = deps({ name: 'Some One' });
-		const data = await load(event('Some One', d));
-		expect(data.passport.username).toBe('Some One');
+	test('names that cannot be last.fm usernames get a 404 without calling last.fm', async () => {
+		const lastfm = fakeLastfm({});
+		const clock = { t: 0 };
+		const d = fakeDeps(lastfm.client, fakeMusicBrainz({}, clock).client, clock);
+		const e = await caught(() => load(event('wp-login.php', d)));
+		expect(isHttpError(e, 404) && e.body.message).toBe('"wp-login.php" isn\'t a last.fm username');
+		expect(lastfm.calls).toEqual([]);
 	});
 
 	test('unknown users get a friendly 404', async () => {
@@ -108,8 +111,8 @@ describe('home form', () => {
 	};
 
 	test('trims the name and redirects to its passport', async () => {
-		const e = await caught(() => submit('  Some One '));
-		expect(isRedirect(e) && e.location).toBe('/Some%20One');
+		const e = await caught(() => submit('  Some-One '));
+		expect(isRedirect(e) && e.location).toBe('/Some-One');
 	});
 
 	test('adds the chosen period to the URL unless it is the default', async () => {
@@ -117,6 +120,11 @@ describe('home form', () => {
 		expect(isRedirect(e1) && e1.location).toBe('/rj?period=overall');
 		const e2 = await caught(() => submit('rj', '12month'));
 		expect(isRedirect(e2) && e2.location).toBe('/rj');
+	});
+
+	test('rejects a name that cannot be a last.fm username with 400', async () => {
+		const result = await submit('not a user!');
+		expect(result).toMatchObject({ status: 400 });
 	});
 
 	test('rejects an empty name with 400', async () => {

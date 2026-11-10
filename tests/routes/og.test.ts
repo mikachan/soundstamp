@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { isHttpError } from '@sveltejs/kit';
+import { isHttpError, isRedirect } from '@sveltejs/kit';
 import { GET as passportCard } from '../../src/routes/[username]/og.png/+server';
 import { GET as homeCard } from '../../src/routes/og.png/+server';
 import { load } from '../../src/routes/[username]/+page.server';
@@ -47,4 +47,33 @@ test('passport pages point link previews at their card, keeping the period', asy
 test('the homepage points link previews at the general card', async () => {
 	const data = await homeLoad(event('/', {}, null));
 	expect(data).toEqual({ ogImage: 'https://soundstamp.sekai.co.uk/og.png' });
+});
+
+async function caught(fn: () => unknown) {
+	try {
+		await fn();
+	} catch (e) {
+		return e;
+	}
+	throw new Error('expected a throw');
+}
+
+test('passport cards redirect extra or default query strings to the one cached address', async () => {
+	const d = deps({ name: 'rj' });
+	const busted = await caught(() => passportCard(event('/rj/og.png?period=overall&x=1', { username: 'rj' }, d)));
+	expect(isRedirect(busted) && busted.status === 301 && busted.location).toBe('/rj/og.png?period=overall');
+	const defaulted = await caught(() => passportCard(event('/rj/og.png?period=12month', { username: 'rj' }, d)));
+	expect(isRedirect(defaulted) && defaulted.location).toBe('/rj/og.png');
+	const cased = await caught(() => passportCard(event('/RJ/og.png', { username: 'RJ' }, d)));
+	expect(isRedirect(cased) && cased.location).toBe('/rj/og.png');
+});
+
+test('the homepage card redirects any query string away', async () => {
+	const e = await caught(() => homeCard(event('/og.png?v=2', {}, null)));
+	expect(isRedirect(e) && e.status === 301 && e.location).toBe('/og.png');
+});
+
+test('cards 404 for names that cannot be last.fm usernames', async () => {
+	const e = await caught(() => passportCard(event('/..%2Fetc/og.png', { username: '../etc' }, deps())));
+	expect(isHttpError(e, 404)).toBe(true);
 });

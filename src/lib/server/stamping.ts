@@ -10,6 +10,8 @@ import { ThrottleBusy } from './store/throttle';
 import type { ArtistRecord, KV } from './store/types';
 
 export const SNAPSHOT_TTL_MS = 24 * 3600 * 1000;
+/** Refresh can't refetch from last.fm more often than this, so it can't be used to drain the API key. */
+const REFRESH_COOLDOWN_MS = 10 * 60 * 1000;
 const TOP_ARTISTS = 500;
 const TOP_TRACKS = 500;
 const SIMILAR_SEEDS = 10;
@@ -78,9 +80,8 @@ export async function getSnapshot(
 ): Promise<Snapshot> {
 	const period = opts.period ?? DEFAULT_PERIOD;
 	const existing = await deps.snapshots.get(storeKey(username, period));
-	const fresh =
-		existing?.version === SNAPSHOT_VERSION && deps.now() - existing.createdAt < SNAPSHOT_TTL_MS;
-	if (existing && fresh && !opts.refresh) return existing;
+	const age = existing?.version === SNAPSHOT_VERSION ? deps.now() - existing.createdAt : Infinity;
+	if (existing && age < (opts.refresh ? REFRESH_COOLDOWN_MS : SNAPSHOT_TTL_MS)) return existing;
 
 	const user = await deps.lastfm.getUser(username);
 	const [artists, tracks] = await Promise.all([

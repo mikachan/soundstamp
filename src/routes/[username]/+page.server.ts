@@ -1,10 +1,11 @@
 import { redirect } from '@sveltejs/kit';
-import { appDeps, rethrowAsHttp } from '#lib/server/app-deps.js';
+import { appDeps, requireValidUsername, rethrowAsHttp } from '#lib/server/app-deps.js';
 import { parsePeriod, periodQuery } from '#lib/passport/periods.js';
 import { currentPassport, getSnapshot } from '#lib/server/stamping.js';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ params, url, locals }) => {
+	requireValidUsername(params.username);
 	const deps = appDeps(locals);
 	const period = parsePeriod(url.searchParams.get('period'));
 	const snapshot = await getSnapshot(deps, params.username, { period }).catch((e: unknown) =>

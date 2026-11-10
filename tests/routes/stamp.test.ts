@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { isRedirect } from '@sveltejs/kit';
+import { isHttpError, isRedirect } from '@sveltejs/kit';
 import { POST as stamp } from '../../src/routes/api/[username]/stamp/+server';
 import { POST as refresh } from '../../src/routes/api/[username]/refresh/+server';
 import { artist, known } from '../lib/passport/fixtures';
@@ -50,4 +50,18 @@ test('stamp and refresh use the period from the query string', async () => {
 		thrown = e;
 	}
 	expect(isRedirect(thrown) && thrown.location).toBe('/RJ?period=overall');
+});
+
+test('stamp and refresh 404 for names that cannot be last.fm usernames', async () => {
+	const { d, lastfm } = setup();
+	for (const handler of [stamp, refresh]) {
+		let thrown: unknown;
+		try {
+			await handler(event('../etc', d));
+		} catch (e) {
+			thrown = e;
+		}
+		expect(isHttpError(thrown, 404)).toBe(true);
+	}
+	expect(lastfm.calls).toEqual([]);
 });

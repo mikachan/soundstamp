@@ -45,8 +45,9 @@ describe('getSnapshot', () => {
 		const clock = { t: 0 };
 		const deps = fakeDeps(lastfm.client, fakeMusicBrainz({}, clock).client, clock);
 		await getSnapshot(deps, 'rj');
+		clock.t = 10 * 60 * 1000;
 		await getSnapshot(deps, 'rj', { refresh: true });
-		clock.t = DAY;
+		clock.t += DAY;
 		await getSnapshot(deps, 'rj');
 		expect(lastfm.calls.filter((c) => c.method === 'getUser')).toHaveLength(3);
 	});
@@ -191,7 +192,7 @@ describe('review fixes', () => {
 		const mb = fakeMusicBrainz(
 			{
 				A: async () => {
-					clock.t = 99_000;
+					clock.t = 999_000;
 					await getSnapshot(deps, 'rj', { refresh: true });
 					return 'IS';
 				}
@@ -200,7 +201,7 @@ describe('review fixes', () => {
 		);
 		deps = fakeDeps(lastfm.client, mb.client, clock);
 		await stampNextBatch(deps, 'rj', 8000);
-		expect((await deps.snapshots.get('rj:12month'))?.createdAt).toBe(99_000);
+		expect((await deps.snapshots.get('rj:12month'))?.createdAt).toBe(999_000);
 	});
 
 	test('records written by another batch meanwhile are kept', async () => {
@@ -361,4 +362,17 @@ test('a 503 after the batch has made progress reports ok, not unavailable', asyn
 	const deps = fakeDeps(lastfm.client, mb.client, clock);
 	const result = await stampNextBatch(deps, 'rj', 8000);
 	expect(result).toMatchObject({ status: 'ok', remaining: 2 });
+});
+
+test('refresh is ignored within 10 minutes of the last fetch', async () => {
+	const lastfm = fakeLastfm({ name: 'RJ' });
+	const clock = { t: 0 };
+	const deps = fakeDeps(lastfm.client, fakeMusicBrainz({}, clock).client, clock);
+	await getSnapshot(deps, 'rj');
+	clock.t = 10 * 60 * 1000 - 1;
+	await getSnapshot(deps, 'rj', { refresh: true });
+	expect(lastfm.calls.filter((c) => c.method === 'getUser')).toHaveLength(1);
+	clock.t = 10 * 60 * 1000;
+	await getSnapshot(deps, 'rj', { refresh: true });
+	expect(lastfm.calls.filter((c) => c.method === 'getUser')).toHaveLength(2);
 });
