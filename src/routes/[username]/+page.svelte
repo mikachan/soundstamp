@@ -8,6 +8,7 @@
 	import SharePassport from '#lib/components/SharePassport.svelte';
 	import { startPolling, type StampStatus } from '#lib/client/poll.js';
 	import { PERIODS, periodLabel, periodQuery } from '#lib/passport/periods.js';
+	import type { Destination } from '#lib/passport/types.js';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
@@ -15,6 +16,7 @@
 	// Server data first, then live updates from the stamping loop.
 	let passport = $derived(data.passport);
 	let status = $state<StampStatus | null>(null);
+	let destination = $state<Destination | undefined>();
 	let empty = $derived(passport.stamps.length === 0 && passport.pendingArtists === 0);
 
 	onMount(() => {
@@ -66,14 +68,16 @@
 	{/each}
 </nav>
 <StampingStatus {passport} {status} />
-<WorldMap stamps={passport.stamps} />
+{#if !empty}
+	<NextDestination destinations={passport.destinations} onchange={(d) => (destination = d)} />
+{/if}
+<WorldMap stamps={passport.stamps} {destination} />
 {#if empty}
 	<p class="empty">
 		No scrobbles to stamp yet. Listen to some music with last.fm scrobbling on, then come back.
 	</p>
 {:else}
 	<Stamps stamps={passport.stamps} />
-	<NextDestination destinations={passport.destinations} />
 	<SharePassport username={passport.username} url={data.shareUrl} image={data.ogImage} />
 {/if}
 

@@ -15,9 +15,8 @@
 		the US.
 	</p>
 	<p>
-		Want your passport removed, or have a question?
-		<a href="https://github.com/mikachan/soundstamp/issues">Open an issue on GitHub</a>. You can also
-		<a href="https://ico.org.uk/make-a-complaint/">complain to the ICO</a>.
+		Have a question?
+		<a href="https://github.com/mikachan/soundstamp/issues">Open an issue on GitHub</a>.
 	</p>
 </article>
 

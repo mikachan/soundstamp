@@ -34,3 +34,19 @@ test('offers every period, marking the current one', () => {
 	expect(screen.getByRole('link', { name: 'All time' })).toHaveAttribute('href', '?period=overall');
 	expect(screen.getByRole('link', { name: 'Last 7 days' })).toHaveAttribute('href', '?period=7day');
 });
+
+test('next destination comes before the map', () => {
+	const { container } = render(
+		Page,
+		props({
+			stamps: [{ country: 'IS', countryName: 'Iceland', plays: 1, share: 1, artists: [], tracks: [] }],
+			destinations: [
+				{ country: 'EE', countryName: 'Estonia', artist: { name: 'Mart Avi', url: 'u' }, becauseOf: 'Björk', match: 0.5 }
+			]
+		})
+	);
+	const destination = screen.getByRole('heading', { name: 'Next destination' });
+	const map = container.querySelector('figure.map')!;
+	expect(destination.compareDocumentPosition(map) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+	expect(container.querySelector('[data-destination="EE"]')).not.toBeNull();
+});

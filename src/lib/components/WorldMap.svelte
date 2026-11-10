@@ -1,10 +1,15 @@
 <script lang="ts">
 	import { toNumericId } from '../geo/countries';
 	import { shade } from '../geo/shade';
-	import { MAP_HEIGHT, MAP_WIDTH, worldShapes as shapes } from '../geo/world';
+	import { countryPoint, MAP_HEIGHT, MAP_WIDTH, worldShapes as shapes } from '../geo/world';
 	import type { Stamp } from '../passport/types';
 
-	let { stamps }: { stamps: Stamp[] } = $props();
+	let {
+		stamps,
+		destination
+	}: { stamps: Stamp[]; destination?: { country: string; countryName: string } } = $props();
+
+	let destinationPoint = $derived(destination ? countryPoint(destination.country) : null);
 
 	let byNumericId = $derived(
 		new Map(stamps.map((s) => [toNumericId(s.country), s] as const).filter(([id]) => id !== null))
@@ -30,6 +35,17 @@
 				<path d={shape.d} class="land"><title>{shape.name}</title></path>
 			{/if}
 		{/each}
+		{#if destination && destinationPoint}
+			<g
+				class="destination"
+				data-destination={destination.country}
+				transform="translate({destinationPoint[0].toFixed(1)} {destinationPoint[1].toFixed(1)})"
+			>
+				<title>Next destination: {destination.countryName}</title>
+				<circle r="14" />
+				<text y="-18" text-anchor="middle">✈</text>
+			</g>
+		{/if}
 	</svg>
 </figure>
 
@@ -55,5 +71,15 @@
 	}
 	.visited {
 		fill: var(--visited);
+	}
+	.destination circle {
+		fill: none;
+		stroke: var(--stamp);
+		stroke-width: 2.5;
+		stroke-dasharray: 4 3;
+	}
+	.destination text {
+		fill: var(--stamp);
+		font-size: 18px;
 	}
 </style>

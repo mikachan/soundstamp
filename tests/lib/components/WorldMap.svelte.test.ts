@@ -41,3 +41,16 @@ test('every path has an accessible title, with play share for visited countries'
 test('a stamp for a country too small for the map does not throw', () => {
 	expect(() => render(WorldMap, { stamps: [stamp('SG', 'Singapore', 0.2)] })).not.toThrow();
 });
+
+test('marks the next destination with a ring and plane, even for countries too small to draw', () => {
+	const { container } = render(WorldMap, { stamps, destination: { country: 'AG', countryName: 'Antigua & Barbuda' } });
+	const marker = container.querySelector('[data-destination="AG"]');
+	expect(marker).not.toBeNull();
+	expect(marker?.querySelector('title')?.textContent).toBe('Next destination: Antigua & Barbuda');
+	expect(marker?.getAttribute('transform')).toMatch(/^translate\([\d.]+ [\d.]+\)$/);
+});
+
+test('no marker without a destination', () => {
+	const { container } = render(WorldMap, { stamps });
+	expect(container.querySelector('[data-destination]')).toBeNull();
+});

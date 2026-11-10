@@ -2,7 +2,7 @@ import { expect, test } from 'vitest';
 import { render, screen } from '@testing-library/svelte';
 import Privacy from '../../src/routes/privacy/+page.svelte';
 
-test('a short, friendly note covering what, how long, where, and who to contact', () => {
+test('a short, friendly note covering what, how long, where, and where to ask questions', () => {
 	const { container } = render(Privacy);
 	expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Your data');
 	expect(container).toHaveTextContent('only uses public last.fm data');
@@ -12,10 +12,6 @@ test('a short, friendly note covering what, how long, where, and who to contact'
 	expect(screen.getByRole('link', { name: 'Open an issue on GitHub' })).toHaveAttribute(
 		'href',
 		'https://github.com/mikachan/soundstamp/issues'
-	);
-	expect(screen.getByRole('link', { name: 'complain to the ICO' })).toHaveAttribute(
-		'href',
-		'https://ico.org.uk/make-a-complaint/'
 	);
 	expect(container).not.toHaveTextContent('legitimate interests');
 });
