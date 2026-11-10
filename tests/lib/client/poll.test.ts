@@ -86,3 +86,13 @@ test('stops on a 4xx response and reports it as terminal', async () => {
 	expect(h.urls).toHaveLength(1);
 	expect(h.errors).toEqual(['terminal']);
 });
+
+test('includes a non-default period in the stamp URL', async () => {
+	const urls: string[] = [];
+	const fetch = (async (url: string) => {
+		urls.push(url);
+		return Response.json({ status: 'ok', remaining: 0, passport: passport() });
+	}) as typeof globalThis.fetch;
+	await startPolling({ username: 'rj', period: 'overall', fetch, sleep: async () => {}, onUpdate: () => {} }).done;
+	expect(urls).toEqual(['/api/rj/stamp?period=overall']);
+});

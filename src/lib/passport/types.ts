@@ -4,10 +4,12 @@ import type {
 	LastfmUser,
 	SimilarArtist
 } from '../server/lastfm/types';
+import type { Period } from './periods';
 
 /** Everything Soundstamp fetched from last.fm for one user. */
 export interface Snapshot {
 	username: string;
+	period: Period;
 	createdAt: number;
 	user: LastfmUser;
 	artists: LastfmArtist[];

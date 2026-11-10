@@ -22,12 +22,12 @@ export function fakeLastfm(opts: {
 				const name = opts.name ?? username;
 				return { name, url: `https://www.last.fm/user/${name}`, registeredYear: 2009, playcount: 1000 };
 			},
-			async getTopArtists(username: string, limit: number) {
-				log('getTopArtists', username, limit);
+			async getTopArtists(username: string, limit: number, period?: string) {
+				log('getTopArtists', username, limit, period);
 				return opts.artists ?? [];
 			},
-			async getTopTracks(username: string, limit: number) {
-				log('getTopTracks', username, limit);
+			async getTopTracks(username: string, limit: number, period?: string) {
+				log('getTopTracks', username, limit, period);
 				return opts.tracks ?? [];
 			},
 			async getSimilar(artist: { name: string; mbid?: string }, limit: number) {

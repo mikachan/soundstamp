@@ -69,6 +69,15 @@ test('getTopArtists parses numbers and drops empty mbids', async () => {
 	]);
 });
 
+test('top artists and tracks use the requested period', async () => {
+	const a = client(topartists);
+	await a.lastfm.getTopArtists('RJ', 500, '3month');
+	expect(a.calls[0].searchParams.get('period')).toBe('3month');
+	const t = client(toptracks);
+	await t.lastfm.getTopTracks('RJ', 500, '7day');
+	expect(t.calls[0].searchParams.get('period')).toBe('7day');
+});
+
 test('getTopArtists returns [] for a user with no artists', async () => {
 	const { lastfm } = client(emptyTopartists);
 	expect(await lastfm.getTopArtists('newbie', 500)).toEqual([]);

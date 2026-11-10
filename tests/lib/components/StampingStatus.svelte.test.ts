@@ -49,8 +49,9 @@ describe('first-visit note', () => {
 			status: 'ok'
 		});
 		expect(container).toHaveTextContent(
-			'Your first visit can take a few minutes: MusicBrainz, where the country data comes from, allows about one lookup a second. Your progress is saved, so you can leave and come back.'
+			'Your first visit can take a few minutes. Your progress is saved, so you can leave and come back.'
 		);
+		expect(container).not.toHaveTextContent('one lookup a second');
 	});
 
 	test('is hidden once the passport is ready', () => {

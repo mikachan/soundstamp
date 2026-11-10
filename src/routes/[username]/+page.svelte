@@ -6,6 +6,7 @@
 	import Stamps from '#lib/components/Stamps.svelte';
 	import NextDestination from '#lib/components/NextDestination.svelte';
 	import { startPolling, type StampStatus } from '#lib/client/poll.js';
+	import { PERIODS, periodLabel, periodQuery } from '#lib/passport/periods.js';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
@@ -20,6 +21,7 @@
 		if (data.remaining === 0) return;
 		const poller = startPolling({
 			username: passport.username,
+			period: data.period,
 			fetch,
 			sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
 			onUpdate: (next, nextStatus) => {
@@ -40,13 +42,24 @@
 </script>
 
 <svelte:head>
-	<title>{passport.username}'s Soundstamp: {passport.countryCount} countries</title>
+	<title>
+		{passport.username}'s Soundstamp: {passport.countryCount} countries ({periodLabel(data.period).toLowerCase()})
+	</title>
 	<meta name="description" content={summary} />
 	<meta property="og:title" content="{passport.username}'s Soundstamp passport" />
 	<meta property="og:description" content={summary} />
 </svelte:head>
 
 <IdStrip {passport} />
+<nav class="periods" aria-label="Listening period">
+	{#each PERIODS as period (period)}
+		<a
+			href={periodQuery(period) || '?'}
+			aria-current={period === data.period ? 'page' : undefined}
+			data-sveltekit-reload>{periodLabel(period)}</a
+		>
+	{/each}
+</nav>
 <StampingStatus {passport} {status} />
 <WorldMap stamps={passport.stamps} />
 {#if empty}
@@ -58,11 +71,30 @@
 	<NextDestination destinations={passport.destinations} />
 {/if}
 
-<form method="POST" action="/api/{encodeURIComponent(passport.username)}/refresh" class="refresh">
+<form method="POST" action="/api/{encodeURIComponent(passport.username)}/refresh{periodQuery(data.period)}" class="refresh">
 	<button>Refresh from last.fm</button>
 </form>
 
 <style>
+	.periods {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.4rem;
+		margin-block: 1rem 0;
+	}
+	.periods a {
+		padding: 0.25rem 0.7rem;
+		border: 1px solid var(--rule);
+		border-radius: 1rem;
+		font-size: 0.85rem;
+		color: var(--muted);
+		text-decoration: none;
+	}
+	.periods a[aria-current='page'] {
+		border-color: var(--stamp);
+		background: var(--stamp);
+		color: var(--card);
+	}
 	.empty {
 		margin-block: 2rem;
 		color: var(--muted);

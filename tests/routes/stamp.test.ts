@@ -12,7 +12,8 @@ function setup() {
 	return { d: fakeDeps(lastfm.client, mb.client, clock), lastfm };
 }
 
-const event = (username: string, deps: unknown) => ({ params: { username }, locals: { deps } }) as never;
+const event = (username: string, deps: unknown, search = '') =>
+	({ params: { username }, url: new URL(`http://localhost/api/${username}/stamp${search}`), locals: { deps } }) as never;
 
 test('stamp endpoint returns the batch result as JSON', async () => {
 	const { d } = setup();
@@ -35,5 +36,18 @@ test('refresh refetches last.fm, keeps artist records, and redirects to the cano
 	expect(isRedirect(thrown) && thrown.status === 303 && thrown.location === '/RJ').toBe(true);
 	expect(lastfm.calls.filter((c) => c.method === 'getUser')).toHaveLength(1);
 	expect(await d.artists.get('mbid:bo')).toEqual(known('JP'));
-	expect((await d.records.get('rj'))?.['mbid:bo']).toEqual(known('JP'));
+	expect((await d.records.get('rj:12month'))?.['mbid:bo']).toEqual(known('JP'));
+});
+
+test('stamp and refresh use the period from the query string', async () => {
+	const { d, lastfm } = setup();
+	await stamp(event('rj', d, '?period=overall'));
+	expect(lastfm.calls.find((c) => c.method === 'getTopArtists')?.args[2]).toBe('overall');
+	let thrown: unknown;
+	try {
+		await refresh(event('rj', d, '?period=overall'));
+	} catch (e) {
+		thrown = e;
+	}
+	expect(isRedirect(thrown) && thrown.location).toBe('/RJ?period=overall');
 });

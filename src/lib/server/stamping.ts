@@ -1,4 +1,5 @@
 import { assemblePassport, READY_COVERAGE } from '../passport/assemble';
+import { DEFAULT_PERIOD, type Period } from '../passport/periods';
 import type { Passport, Snapshot } from '../passport/types';
 import { artistKey } from './artist-key';
 import type { createLastfmClient } from './lastfm/client';
@@ -39,7 +40,8 @@ export type BatchResult =
 
 type QueueItem = { name: string; mbid?: string };
 
-const userKey = (username: string) => username.toLowerCase();
+/** Snapshots and records are stored per user and period, e.g. "rj:12month". */
+const storeKey = (username: string, period: Period) => `${username.toLowerCase()}:${period}`;
 
 function candidates(s: Snapshot): QueueItem[] {
 	const own = new Set(s.artists.map(artistKey));
@@ -57,24 +59,26 @@ function candidates(s: Snapshot): QueueItem[] {
 		.map((c) => c.item);
 }
 
-async function mergeRecords(deps: StampingDeps, username: string, fresh: Record<string, ArtistRecord>) {
+async function mergeRecords(deps: StampingDeps, s: Snapshot, fresh: Record<string, ArtistRecord>) {
 	if (Object.keys(fresh).length === 0) return;
-	const latest = (await deps.records.get(userKey(username))) ?? {};
-	await deps.records.set(userKey(username), { ...latest, ...fresh });
+	const key = storeKey(s.username, s.period);
+	const latest = (await deps.records.get(key)) ?? {};
+	await deps.records.set(key, { ...latest, ...fresh });
 }
 
 export async function getSnapshot(
 	deps: StampingDeps,
 	username: string,
-	opts: { refresh?: boolean } = {}
+	opts: { refresh?: boolean; period?: Period } = {}
 ): Promise<Snapshot> {
-	const existing = await deps.snapshots.get(userKey(username));
+	const period = opts.period ?? DEFAULT_PERIOD;
+	const existing = await deps.snapshots.get(storeKey(username, period));
 	if (existing && !opts.refresh && deps.now() - existing.createdAt < SNAPSHOT_TTL_MS) return existing;
 
 	const user = await deps.lastfm.getUser(username);
 	const [artists, tracks] = await Promise.all([
-		deps.lastfm.getTopArtists(user.name, TOP_ARTISTS),
-		deps.lastfm.getTopTracks(user.name, TOP_TRACKS)
+		deps.lastfm.getTopArtists(user.name, TOP_ARTISTS, period),
+		deps.lastfm.getTopTracks(user.name, TOP_TRACKS, period)
 	]);
 	const similar = await Promise.all(
 		artists.slice(0, SIMILAR_SEEDS).map(async (seed) => ({
@@ -83,7 +87,15 @@ export async function getSnapshot(
 			artists: await deps.lastfm.getSimilar(seed, SIMILAR_PER_SEED).catch(() => [])
 		}))
 	);
-	const snapshot: Snapshot = { username: user.name, createdAt: deps.now(), user, artists, tracks, similar };
+	const snapshot: Snapshot = {
+		username: user.name,
+		period,
+		createdAt: deps.now(),
+		user,
+		artists,
+		tracks,
+		similar
+	};
 
 	// Pick up countries already resolved for other users.
 	const keys = [...new Set([...artists.map(artistKey), ...candidates(snapshot).map(artistKey)])];
@@ -96,13 +108,13 @@ export async function getSnapshot(
 		});
 	}
 
-	await deps.snapshots.set(userKey(user.name), snapshot);
-	await mergeRecords(deps, user.name, known);
+	await deps.snapshots.set(storeKey(user.name, period), snapshot);
+	await mergeRecords(deps, snapshot, known);
 	return snapshot;
 }
 
 export async function loadRecords(deps: StampingDeps, s: Snapshot): Promise<Map<string, ArtistRecord>> {
-	return new Map(Object.entries((await deps.records.get(userKey(s.username))) ?? {}));
+	return new Map(Object.entries((await deps.records.get(storeKey(s.username, s.period))) ?? {}));
 }
 
 /**
@@ -149,9 +161,10 @@ function stopStatus(error: unknown): BatchResult['status'] | 'stop' | null {
 export async function stampNextBatch(
 	deps: StampingDeps,
 	username: string,
-	budgetMs = DEFAULT_BUDGET_MS
+	budgetMs = DEFAULT_BUDGET_MS,
+	period: Period = DEFAULT_PERIOD
 ): Promise<BatchResult> {
-	const s = await getSnapshot(deps, username);
+	const s = await getSnapshot(deps, username, { period });
 	const records = await loadRecords(deps, s);
 	const deadline = deps.now() + budgetMs;
 	const fresh: Record<string, ArtistRecord> = {};
@@ -163,7 +176,7 @@ export async function stampNextBatch(
 		fresh[key] = record;
 	};
 	const finish = async (): Promise<BatchResult> => {
-		await mergeRecords(deps, s.username, fresh);
+		await mergeRecords(deps, s, fresh);
 		return { status, passport: assemblePassport(s, records), remaining: pendingQueue(s, records).length };
 	};
 

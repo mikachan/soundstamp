@@ -56,10 +56,10 @@ export function createLastfmClient(opts: { apiKey: string; fetch: typeof fetch }
 			};
 		},
 
-		async getTopArtists(username: string, limit: number): Promise<LastfmArtist[]> {
+		async getTopArtists(username: string, limit: number, period = 'overall'): Promise<LastfmArtist[]> {
 			const body = await call('user.gettopartists', {
 				user: username,
-				period: 'overall',
+				period,
 				limit: String(limit)
 			});
 			return asArray<any>(body.topartists?.artist).map((a) => ({
@@ -70,10 +70,10 @@ export function createLastfmClient(opts: { apiKey: string; fetch: typeof fetch }
 			}));
 		},
 
-		async getTopTracks(username: string, limit: number): Promise<LastfmTrack[]> {
+		async getTopTracks(username: string, limit: number, period = 'overall'): Promise<LastfmTrack[]> {
 			const body = await call('user.gettoptracks', {
 				user: username,
-				period: 'overall',
+				period,
 				limit: String(limit)
 			});
 			return asArray<any>(body.toptracks?.track).map((t) => ({

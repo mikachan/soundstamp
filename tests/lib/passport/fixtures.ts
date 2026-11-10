@@ -24,6 +24,7 @@ export const track = (
 export function snapshot(overrides: Partial<Snapshot> = {}): Snapshot {
 	return {
 		username: 'rj',
+		period: '12month',
 		createdAt: 0,
 		user: { name: 'RJ', url: 'https://www.last.fm/user/RJ', registeredYear: 2009, playcount: 5000 },
 		artists: [],

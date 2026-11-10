@@ -1,3 +1,4 @@
+import { DEFAULT_PERIOD, periodQuery, type Period } from '../passport/periods';
 import type { Passport } from '../passport/types';
 import type { BatchResult } from '../server/stamping';
 
@@ -10,6 +11,7 @@ const MAX_BACKOFF_MS = 30_000;
 /** Ask the server to stamp batches until nothing is left, backing off when MusicBrainz is unhappy. */
 export function startPolling(opts: {
 	username: string;
+	period?: Period;
 	fetch: typeof fetch;
 	onUpdate: (passport: Passport, status: StampStatus) => void;
 	/** A request failed; `terminal` means polling has stopped (4xx, e.g. the user no longer exists). */
@@ -24,7 +26,8 @@ export function startPolling(opts: {
 		while (!stopped) {
 			let result: BatchResult;
 			try {
-				const response = await opts.fetch(`/api/${encodeURIComponent(opts.username)}/stamp`, {
+				const url = `/api/${encodeURIComponent(opts.username)}/stamp${periodQuery(opts.period ?? DEFAULT_PERIOD)}`;
+				const response = await opts.fetch(url, {
 					method: 'POST'
 				});
 				if (response.status >= 400 && response.status < 500) {

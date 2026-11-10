@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { DEFAULT_PERIOD, PERIODS, periodLabel } from '#lib/passport/periods.js';
 	import type { PageProps } from './$types';
 
 	let { form }: PageProps = $props();
@@ -24,6 +25,12 @@
 			<input id="username" name="username" autocomplete="username" required />
 			<button>Open passport</button>
 		</div>
+		<label for="period">Listening period</label>
+		<select id="period" name="period" value={DEFAULT_PERIOD}>
+			{#each PERIODS as period (period)}
+				<option value={period}>{periodLabel(period)}</option>
+			{/each}
+		</select>
 		{#if form?.message}<p class="error">{form.message}</p>{/if}
 	</form>
 </section>
@@ -47,7 +54,8 @@
 		flex-wrap: wrap;
 		gap: 0.5rem;
 	}
-	input {
+	input,
+	select {
 		flex: 1 1 12rem;
 		padding: 0.6rem 0.8rem;
 		border: 1px solid var(--rule);

@@ -22,12 +22,12 @@ describe('getSnapshot', () => {
 
 		expect(s.username).toBe('RJ');
 		expect(s.createdAt).toBe(5000);
-		expect(lastfm.calls.find((c) => c.method === 'getTopArtists')?.args).toEqual(['RJ', 500]);
-		expect(lastfm.calls.find((c) => c.method === 'getTopTracks')?.args).toEqual(['RJ', 500]);
+		expect(lastfm.calls.find((c) => c.method === 'getTopArtists')?.args).toEqual(['RJ', 500, '12month']);
+		expect(lastfm.calls.find((c) => c.method === 'getTopTracks')?.args).toEqual(['RJ', 500, '12month']);
 		expect(lastfm.calls.filter((c) => c.method === 'getSimilar').map((c) => c.args[0])).toEqual(
 			artists.slice(0, 10).map((a) => a.name)
 		);
-		expect(await deps.snapshots.get('rj')).not.toBeNull();
+		expect(await deps.snapshots.get('rj:12month')).not.toBeNull();
 	});
 
 	test('reuses a snapshot under 24 hours old, keyed by lowercased username', async () => {
@@ -199,7 +199,7 @@ describe('review fixes', () => {
 		);
 		deps = fakeDeps(lastfm.client, mb.client, clock);
 		await stampNextBatch(deps, 'rj', 8000);
-		expect((await deps.snapshots.get('rj'))?.createdAt).toBe(99_000);
+		expect((await deps.snapshots.get('rj:12month'))?.createdAt).toBe(99_000);
 	});
 
 	test('records written by another batch meanwhile are kept', async () => {
@@ -208,8 +208,8 @@ describe('review fixes', () => {
 		const mb = fakeMusicBrainz(
 			{
 				A: async () => {
-					const theirs = (await deps.records.get('rj')) ?? {};
-					await deps.records.set('rj', { ...theirs, 'name:b': known('GB') });
+					const theirs = (await deps.records.get('rj:12month')) ?? {};
+					await deps.records.set('rj:12month', { ...theirs, 'name:b': known('GB') });
 					return 'IS';
 				}
 			},
@@ -217,7 +217,7 @@ describe('review fixes', () => {
 		);
 		deps = fakeDeps(fakeLastfm({ artists: [artist('A', 2), artist('B', 1)] }).client, mb.client, clock);
 		await stampNextBatch(deps, 'rj', 1000);
-		const stored = await deps.records.get('rj');
+		const stored = await deps.records.get('rj:12month');
 		expect(Object.keys(stored ?? {}).sort()).toEqual(['name:a', 'name:b']);
 	});
 });
@@ -267,4 +267,30 @@ test('does not repeat a bulk request for MBIDs it could not answer', async () =>
 	await stampNextBatch(deps, 'rj', 8000);
 	expect(mb.bulkCalls).toEqual([['a', 'b']]);
 	expect(mb.asked).toEqual(['B', 'B']);
+});
+
+describe('periods', () => {
+	test('defaults to the last 12 months and stores each period separately', async () => {
+		const lastfm = fakeLastfm({ name: 'RJ', artists: [artist('A', 1)] });
+		const clock = { t: 0 };
+		const deps = fakeDeps(lastfm.client, fakeMusicBrainz({}, clock).client, clock);
+
+		const year = await getSnapshot(deps, 'rj');
+		const ever = await getSnapshot(deps, 'rj', { period: 'overall' });
+
+		expect(year.period).toBe('12month');
+		expect(ever.period).toBe('overall');
+		const periods = lastfm.calls.filter((c) => c.method === 'getTopArtists').map((c) => c.args[2]);
+		expect(periods).toEqual(['12month', 'overall']);
+		expect((await deps.snapshots.list()).sort()).toEqual(['rj:12month', 'rj:overall']);
+	});
+
+	test('stampNextBatch works on the requested period', async () => {
+		const lastfm = fakeLastfm({ name: 'RJ', artists: [artist('A', 1)] });
+		const clock = { t: 0 };
+		const deps = fakeDeps(lastfm.client, fakeMusicBrainz({ A: 'IS' }, clock).client, clock);
+		const result = await stampNextBatch(deps, 'rj', 8000, '1month');
+		expect(result.passport.stamps.map((st) => st.country)).toEqual(['IS']);
+		expect(await deps.snapshots.get('rj:1month')).not.toBeNull();
+	});
 });

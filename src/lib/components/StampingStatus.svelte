@@ -25,8 +25,8 @@
 		{/if}
 		{#if message && !passport.ready}
 			<p class="note">
-				Your first visit can take a few minutes: MusicBrainz, where the country data comes from,
-				allows about one lookup a second. Your progress is saved, so you can leave and come back.
+				Your first visit can take a few minutes. Your progress is saved, so you can leave and come
+				back.
 			</p>
 		{/if}
 		{#if passport.unknownArtists > 0}
