@@ -1,4 +1,5 @@
 import { isRealCountry } from '../../geo/countries';
+import { normaliseName } from '../artist-key';
 
 const API_ROOT = 'https://musicbrainz.org/ws/2';
 const MAX_AREA_HOPS = 3;
@@ -17,8 +18,7 @@ function countryFromCodes(codes: string[] | undefined): string | null | undefine
 	return codes.find(isRealCountry) ?? null;
 }
 
-const sameName = (a: string, b: string) =>
-	a.normalize('NFKC').trim().toLowerCase() === b.normalize('NFKC').trim().toLowerCase();
+const sameName = (a: string, b: string) => normaliseName(a) === normaliseName(b);
 
 const escapeLucene = (s: string) => s.replace(/["\\]/g, '\\$&');
 
