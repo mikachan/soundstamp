@@ -22,6 +22,8 @@
 		<a href="https://musicbrainz.org">Country data from MusicBrainz</a>
 		<span aria-hidden="true">·</span>
 		<a href="https://sekai.co.uk">Part of sekai.co.uk</a>
+		<span aria-hidden="true">·</span>
+		<a href="https://github.com/mikachan/soundstamp">Source on GitHub</a>
 	</footer>
 </div>
 
