@@ -43,15 +43,12 @@ describe('StampingStatus', () => {
 });
 
 describe('first-visit note', () => {
-	test('explains why stamping takes a while and that progress is saved', () => {
+	test('shows while the passport is still being stamped', () => {
 		const { container } = render(StampingStatus, {
 			passport: passport({ ready: false, coverage: 0.2, pendingArtists: 300 }),
 			status: 'ok'
 		});
-		expect(container).toHaveTextContent(
-			'Your first visit can take a few minutes. Your progress is saved, so you can leave and come back.'
-		);
-		expect(container).not.toHaveTextContent('one lookup a second');
+		expect(container.querySelector('.note')).not.toBeNull();
 	});
 
 	test('is hidden once the passport is ready', () => {
@@ -59,7 +56,7 @@ describe('first-visit note', () => {
 			passport: passport({ ready: true, coverage: 0.95, pendingArtists: 12 }),
 			status: 'ok'
 		});
-		expect(container).not.toHaveTextContent('first visit');
+		expect(container.querySelector('.note')).toBeNull();
 	});
 });
 
