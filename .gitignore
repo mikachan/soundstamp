@@ -1,0 +1,9 @@
+.superpowers/
+.env
+.env.*
+!.env.example
+.netlify/
+node_modules/
+build/
+.svelte-kit/
+.DS_Store
