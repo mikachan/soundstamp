@@ -27,7 +27,17 @@
 	<form method="POST">
 		<label for="username">last.fm username</label>
 		<div class="row">
-			<input id="username" name="username" autocomplete="username" required />
+			<input
+				id="username"
+				name="username"
+				required
+				autocomplete="off"
+				autocapitalize="none"
+				autocorrect="off"
+				spellcheck="false"
+				data-1p-ignore
+				data-lpignore="true"
+			/>
 			<button>Open my passport</button>
 		</div>
 		<label for="period">Listening period</label>
