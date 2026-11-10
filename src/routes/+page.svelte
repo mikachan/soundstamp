@@ -21,8 +21,7 @@
 <section class="hero">
 	<h1>How far does your music travel?</h1>
 	<p>
-		A map of every country in your last.fm history, a stamp for each one, and one place you haven't
-		been yet.
+		A map of every country in your last.fm history, a stamp for each one, and a suggested place for you to visit/listen to next.
 	</p>
 	<form method="POST">
 		<label for="username">last.fm username</label>
