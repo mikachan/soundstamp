@@ -1,6 +1,7 @@
 <script lang="ts">
 	import '../app.css';
 	import favicon from '#lib/assets/favicon.svg';
+	import Logo from '#lib/components/Logo.svelte';
 	import type { LayoutProps } from './$types';
 
 	let { children }: LayoutProps = $props();
@@ -11,7 +12,7 @@
 </svelte:head>
 
 <div class="page">
-	<nav><a href="/" class="brand">Soundstamp</a></nav>
+	<nav><a href="/" class="brand"><Logo />Soundstamp</a></nav>
 	<main>
 		{@render children()}
 	</main>
@@ -37,6 +38,9 @@
 		padding-block: 1rem;
 	}
 	.brand {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.5rem;
 		font: 700 1.1rem/1 var(--font-display);
 		letter-spacing: 0.04em;
 		text-decoration: none;

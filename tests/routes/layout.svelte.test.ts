@@ -11,3 +11,12 @@ test('footer credits last.fm, MusicBrainz and links to sekai.co.uk', () => {
 	expect(screen.getByRole('link', { name: 'Country data from MusicBrainz' })).toHaveAttribute('href', 'https://musicbrainz.org');
 	expect(screen.getByRole('link', { name: 'Part of sekai.co.uk' })).toHaveAttribute('href', 'https://sekai.co.uk');
 });
+
+test('the brand link shows the vinyl postmark logo beside the name', () => {
+	render(Layout, { children } as never);
+	const brand = screen.getByRole('link', { name: 'Soundstamp' });
+	expect(brand).toHaveAttribute('href', '/');
+	const logo = brand.querySelector('svg');
+	expect(logo).toHaveAttribute('aria-hidden', 'true');
+	expect(logo?.querySelectorAll('path')).toHaveLength(4);
+});
