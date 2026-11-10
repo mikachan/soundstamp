@@ -16,11 +16,11 @@
 		{@render children()}
 	</main>
 	<footer>
-		<a href="https://www.last.fm">powered by AudioScrobbler</a>
+		<a href="https://www.last.fm">Powered by AudioScrobbler</a>
 		<span aria-hidden="true">·</span>
 		<a href="https://musicbrainz.org">Country data from MusicBrainz</a>
 		<span aria-hidden="true">·</span>
-		<a href="https://sekai.co.uk">sekai.co.uk</a>
+		<a href="https://sekai.co.uk">Part of sekai.co.uk</a>
 	</footer>
 </div>
 
