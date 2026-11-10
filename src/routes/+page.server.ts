@@ -1,6 +1,8 @@
 import { fail, redirect } from '@sveltejs/kit';
 import { parsePeriod, periodQuery } from '#lib/passport/periods.js';
-import type { Actions } from './$types';
+import type { Actions, PageServerLoad } from './$types';
+
+export const load: PageServerLoad = ({ url }) => ({ ogImage: `${url.origin}/og.png` });
 
 export const actions: Actions = {
 	default: async ({ request }) => {

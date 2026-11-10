@@ -48,6 +48,10 @@
 	<meta name="description" content={summary} />
 	<meta property="og:title" content="{passport.username}'s Soundstamp passport" />
 	<meta property="og:description" content={summary} />
+	<meta property="og:image" content={data.ogImage} />
+	<meta property="og:image:width" content="1200" />
+	<meta property="og:image:height" content="630" />
+	<meta name="twitter:card" content="summary_large_image" />
 </svelte:head>
 
 <IdStrip {passport} />

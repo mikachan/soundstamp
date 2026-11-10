@@ -13,5 +13,6 @@ export const load: PageServerLoad = async ({ params, url, locals }) => {
 	if (snapshot.username !== params.username) {
 		redirect(301, `/${encodeURIComponent(snapshot.username)}${periodQuery(period)}`);
 	}
-	return { ...(await currentPassport(deps, snapshot)), period };
+	const ogImage = `${url.origin}/${encodeURIComponent(snapshot.username)}/og.png${periodQuery(period)}`;
+	return { ...(await currentPassport(deps, snapshot)), period, ogImage };
 };

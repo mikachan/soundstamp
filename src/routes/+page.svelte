@@ -2,11 +2,16 @@
 	import { DEFAULT_PERIOD, PERIODS, periodLabel } from '#lib/passport/periods.js';
 	import type { PageProps } from './$types';
 
-	let { form }: PageProps = $props();
+	let { data, form }: PageProps = $props();
 </script>
 
 <svelte:head>
 	<title>Soundstamp: how far does your music travel?</title>
+	<meta property="og:title" content="Soundstamp: how far does your music travel?" />
+	<meta property="og:image" content={data.ogImage} />
+	<meta property="og:image:width" content="1200" />
+	<meta property="og:image:height" content="630" />
+	<meta name="twitter:card" content="summary_large_image" />
 	<meta
 		name="description"
 		content="Turn your last.fm listening history into a passport of every country your music comes from."
