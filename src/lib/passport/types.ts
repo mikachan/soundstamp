@@ -4,6 +4,7 @@ import type {
 	LastfmUser,
 	SimilarArtist
 } from '../server/lastfm/types';
+import type { ArtistRecord } from '../server/store/types';
 
 /** Everything Soundstamp fetched from last.fm for one user. */
 export interface Snapshot {
@@ -14,6 +15,8 @@ export interface Snapshot {
 	tracks: LastfmTrack[];
 	/** Similar artists for each of the user's top artists; `seed` is the seed artist's name. */
 	similar: { seed: string; artists: SimilarArtist[] }[];
+	/** Resolved countries for this snapshot's artists and candidates, keyed by artistKey. */
+	records: Record<string, ArtistRecord>;
 }
 
 export interface Stamp {
