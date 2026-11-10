@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { render } from '@testing-library/svelte';
+import { render, screen } from '@testing-library/svelte';
 import StampingStatus from '#lib/components/StampingStatus.svelte';
 import { passport } from '../passport/passport-fixture';
 
@@ -60,5 +60,20 @@ describe('first-visit note', () => {
 			status: 'ok'
 		});
 		expect(container).not.toHaveTextContent('first visit');
+	});
+});
+
+describe('progress bar', () => {
+	test('stays visible after the passport is ready, until every artist is stamped', () => {
+		render(StampingStatus, {
+			passport: passport({ ready: true, coverage: 0.95, pendingArtists: 12 }),
+			status: 'ok'
+		});
+		expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '95');
+	});
+
+	test('disappears once everything is stamped', () => {
+		render(StampingStatus, { passport: passport({ pendingArtists: 0, unknownArtists: 2 }), status: null });
+		expect(screen.queryByRole('progressbar')).toBeNull();
 	});
 });

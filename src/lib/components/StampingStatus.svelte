@@ -19,7 +19,15 @@
 	<div class="status" role="status" aria-live="polite">
 		{#if message}
 			<p class="progress">
-				{#if !passport.ready}<span class="bar" style:--coverage={passport.coverage}></span>{/if}
+				<span
+					class="bar"
+					role="progressbar"
+					aria-label="Passport stamped"
+					aria-valuemin="0"
+					aria-valuemax="100"
+					aria-valuenow={Math.round(passport.coverage * 100)}
+					style:--coverage={passport.coverage}
+				></span>
 				{message}
 			</p>
 		{/if}
