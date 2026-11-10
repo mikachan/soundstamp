@@ -1,5 +1,7 @@
 # Soundstamp
 
+[![Netlify Status](https://api.netlify.com/api/v1/badges/10f3cc1b-d8b4-44dc-be33-19cf796a6375/deploy-status)](https://soundstamp.sekai.co.uk)
+
 Turn your last.fm listening history into a passport: a world map of where your music comes from, a stamp for every country you've "visited", and a suggestion for somewhere new.
 
 ## Setup
