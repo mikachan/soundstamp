@@ -6,7 +6,7 @@
 </script>
 
 <svelte:head>
-	<title>Soundstamp: where in the world is your music from?</title>
+	<title>Soundstamp: how far does your music travel?</title>
 	<meta
 		name="description"
 		content="Turn your last.fm listening history into a passport of every country your music comes from."
@@ -14,16 +14,16 @@
 </svelte:head>
 
 <section class="hero">
-	<h1>Where in the world is your music from?</h1>
+	<h1>How far does your music travel?</h1>
 	<p>
-		Soundstamp turns your last.fm listening history into a passport: a map of every country your
-		music comes from, a stamp for each one, and somewhere new to visit next.
+		A map of every country in your last.fm history, a stamp for each one, and one place you haven't
+		been yet.
 	</p>
 	<form method="POST">
 		<label for="username">last.fm username</label>
 		<div class="row">
 			<input id="username" name="username" autocomplete="username" required />
-			<button>Open passport</button>
+			<button>Open my passport</button>
 		</div>
 		<label for="period">Listening period</label>
 		<select id="period" name="period" value={DEFAULT_PERIOD}>
