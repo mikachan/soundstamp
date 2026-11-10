@@ -34,3 +34,15 @@ Each production deploy on Netlify's free plan costs 15 of its 300 credits, so do
 - [ ] Ask whether showing last.fm avatars is allowed (cl. 5.1.8); until then the ID strip uses generated initials
 - [ ] Ask whether opt-in "taste pen pals" matching would be allowed
 - [ ] Make sure the domain name doesn't contain "lastfm" or "last.fm"
+- [ ] Don't announce or promote the site until last.fm has replied (API ToS cl. 8.2)
+- [ ] Ask last.fm whether a text "powered by AudioScrobbler" link is enough, or they want their badge
+- [ ] Check whether you need to pay the ICO data protection fee (ico.org.uk self-assessment)
+- [ ] Check your employer's policy on side projects
+- [ ] Search UK IPO / EUIPO for "Soundstamp" trademarks
+- [ ] Set `LASTFM_API_KEY` and `MB_CONTACT` in Netlify's environment variables
+
+## Licence
+
+Soundstamp is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 2 of the License, or (at your option) any later version. See [`LICENSE`](LICENSE).
+
+Third-party libraries shipped to browsers are listed with their licences at `/licenses.txt`, generated at build time. The DM Serif Display font used for link-preview images is under the SIL Open Font License ([`src/lib/server/og/DMSerifDisplay-OFL.txt`](src/lib/server/og/DMSerifDisplay-OFL.txt)). Country data comes from [MusicBrainz](https://musicbrainz.org) (CC0); map shapes from [Natural Earth](https://www.naturalearthdata.com) via world-atlas (public domain).

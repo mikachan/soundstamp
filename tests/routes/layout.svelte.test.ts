@@ -10,6 +10,8 @@ test('footer credits last.fm, MusicBrainz and links to sekai.co.uk', () => {
 	expect(screen.getByRole('link', { name: 'Powered by AudioScrobbler' })).toHaveAttribute('href', 'https://www.last.fm');
 	expect(screen.getByRole('link', { name: 'Country data from MusicBrainz' })).toHaveAttribute('href', 'https://musicbrainz.org');
 	expect(screen.getByRole('link', { name: 'Part of sekai.co.uk' })).toHaveAttribute('href', 'https://sekai.co.uk');
+	expect(screen.getByRole('link', { name: 'Privacy' })).toHaveAttribute('href', '/privacy');
+	expect(screen.getByRole('link', { name: 'Licences' })).toHaveAttribute('href', '/licenses.txt');
 	expect(screen.getByRole('link', { name: 'Source on GitHub' })).toHaveAttribute(
 		'href',
 		'https://github.com/mikachan/soundstamp'
